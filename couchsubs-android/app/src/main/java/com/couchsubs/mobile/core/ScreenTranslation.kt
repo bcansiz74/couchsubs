@@ -574,6 +574,58 @@ object ScreenTranslation {
     }
 
     /**
+     * Bölünmeyen sekme şeridi (#1375, beta.105: "JASON LUCIA HARİTASI ÖZETİLERLEME"): görüntüdeki boşluk sekmeleri
+     * ayırmadığında (sekmeler sık, seçili sekme renkli) BÜYÜK HARFLİ satır arayüz sözlüğüne göre bölünür. Satır baştan
+     * sona sözlükteki etiketlerden (en uzun eşleşme önce: "SET DESTINATION", "ADD MARKER" tek etikettir), "AD & AD" ya da
+     * karakter adı çiftinden ("JASON LUCIA") oluşmalı; en az üç parça ya da bir ad çifti olmalı (iki sözlük sözcüklü
+     * gerçek etiket bölünmez). Her parçanın kutusu sözcük kutularından (yoksa harf sayısından kestirilir). Simgeli satıra
+     * dokunulmaz. Mac/iPhone ve Windows aynı.
+     */
+    fun glossaryPieces(line: TextLine): List<TextLine> {
+        val box = line.box ?: return listOf(line)
+        if (ButtonIcons.MARKER in line.text || !line.icons.isNullOrEmpty() || !TextStyleSampler.isUpper(line.text)) return listOf(line)
+        val words = line.text.split(' ').filter { it.isNotEmpty() }
+        if (words.size < 2) return listOf(line)
+        val segments = mutableListOf<IntRange>()
+        var names = false
+        var i = 0
+        while (i < words.size) {
+            if (i + 2 < words.size && words[i + 1] == "&" && words[i].any { it.isLetter() } && words[i + 2].any { it.isLetter() }) {
+                segments.add(i until i + 3)
+                names = true
+                i += 3
+                continue
+            }
+            if (i + 1 < words.size && isNamePair(words[i] + " " + words[i + 1])) {
+                segments.add(i until i + 2)
+                names = true
+                i += 2
+                continue
+            }
+            val end = (minOf(words.size, i + GLOSSARY_REACH) downTo i + 1).firstOrNull { end ->
+                UiCommands.translateLabel(words.subList(i, end).joinToString(" ")) != null
+            } ?: return listOf(line)
+            segments.add(i until end)
+            i = end
+        }
+        if (segments.size < 3 && !(names && segments.size >= 2)) return listOf(line)
+        val given = line.words
+        val measured = given != null && given.size == words.size
+        val spans = if (measured) given!! else ButtonIcons.estimate(line.text, box)
+        if (spans.size != words.size) return listOf(line)
+        return segments.map { range ->
+            val part = spans.subList(range.first, range.last + 1)
+            val span = part.drop(1).fold(part[0].box) { all, word -> all.union(word.box) }
+            TextLine(words.subList(range.first, range.last + 1).joinToString(" "),
+                TextBox(span.left, box.top, span.right, box.bottom), if (measured) part.toList() else null,
+                confidence = line.confidence)
+        }
+    }
+
+    /** Sözlük etiketinin en çok sözcük sayısı ([glossaryPieces]). */
+    internal const val GLOSSARY_REACH = 3
+
+    /**
      * Satırın yazı boyu: sözcük kutularının ortanca yüksekliği (satır kutusundan büyük değil). Satıra katılan simge
      * harflerden uzundur; satır kutusunu, onunla sekme boşluğu eşiğini de büyütüyordu (#1372). Mac ve Windows aynı.
      */
@@ -760,12 +812,15 @@ object ScreenTranslation {
      * kimyasalları topluyor") ve kutu simgenin üstünü örtüyordu. Baştaki bir-iki BÜYÜK harflik sözcük, ardında büyük harfle
      * başlayan ve küçük harf taşıyan (BÜYÜK HARFLİ olmayan) en az iki sözcük varsa simgedir: atılır, kutu ikinci sözcükten
      * başlar. Gerçek kısa sözcükler ([BADGE_WORDS]: "A", "I", "OK", "TV", "DJ"…) dokunulmaz. Mac/iPhone ve Windows aynı.
+     * Büyük-küçük karışık okunan simge de ("Kh", "Kk"; beta.105) simgedir: ilk harfi büyük, ikincisi küçük, gerçek iki
+     * harfli sözcük değil ("Go", "No", "Do" [BADGE_WORDS]'te).
      */
     fun withoutBadge(line: TextLine): TextLine {
         val tokens = line.text.split(' ').filter { it.isNotEmpty() }
         if (tokens.size < 3) return line
         val head = tokens[0]
-        if (head.length !in 1..2 || !head.all { it.isLetter() && it.isUpperCase() } || head in BADGE_WORDS) return line
+        if (head.length !in 1..2 || !head.all { it.isLetter() } || !head[0].isUpperCase() ||
+            head.uppercase(java.util.Locale.ROOT) in BADGE_WORDS) return line
         val rest = tokens.drop(1)
         if (rest[0].first().isUpperCase().not() || rest.joinToString("").none { it.isLowerCase() }) return line
         val trimmed = line.copy(text = rest.joinToString(" "))
@@ -780,7 +835,9 @@ object ScreenTranslation {
 
     /** Satır başında simge sanılmayacak kısa BÜYÜK harfli sözcükler. */
     internal val BADGE_WORDS: Set<String> = setOf("A", "I", "O", "OK", "TV", "DJ", "UK", "US", "UN", "LA", "NY", "MR", "DR", "MS",
-        "ST", "PS", "AI", "HQ", "ID", "EU", "OF", "IN", "ON", "TO", "MY", "NO", "GO", "UP")
+        "ST", "PS", "AI", "HQ", "ID", "EU", "OF", "IN", "ON", "TO", "MY", "NO", "GO", "UP",
+        "AM", "AN", "AS", "AT", "BE", "BY", "DO", "HE", "HI", "IF", "IS", "IT", "ME", "OH",
+        "OR", "SO", "WE", "YO", "OI", "AH", "HA", "EH", "UH", "UM", "OX", "JR", "SR", "VS")
 
     /**
      * Satırın başındaki ya da sonundaki kumanda simgesi (kareden tanınmış simge ya da okunmuş tuş adı: "RECENTER L3",

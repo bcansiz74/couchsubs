@@ -379,6 +379,9 @@ final class TextPaintTests: XCTestCase {
         menu.menu = true
         XCTAssertEqual(RegionWatcher.yieldingPresets([phone, menu]).map(\.id), ["auto-1"])
         menu.region = CropRegion(top: 0.05, bottom: 0.12, left: 0.4, right: 0.9)
+        // #1365 beta.105: menü sürerken hazır alan kesişmese de okunmaz (aynı ekranı yeniden okuyup ikiz kutu çiziyordu).
+        XCTAssertEqual(RegionWatcher.yieldingPresets([phone, menu]).map(\.id), ["auto-1"], "menüde hazır alan okunmaz")
+        menu.menu = false
         XCTAssertEqual(RegionWatcher.yieldingPresets([phone, menu]).map(\.id), [phone.id, "auto-1"], "kesişmeyen hazır alan kalır")
     }
 

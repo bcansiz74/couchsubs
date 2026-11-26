@@ -101,6 +101,8 @@ data class ExtraArea(
     val auto: Boolean = false,
     /** Otomatik alan menü durumunda bulundu: kısa etiketler de çevrilir ([ScreenTextNoise]). */
     val menu: Boolean = false,
+    /** Menü alanı harita düzeninde ([ScreenTextDetector.inMapLayout], #1365): haritanın üstüne ikiz kutu çizilmez; kaydedilmez. */
+    val map: Boolean = false,
 ) {
     companion object {
         /** En çok bu kadar ek alan tanımlanır (her biri saniyede bir okunur). */
@@ -486,8 +488,12 @@ class RegionWatcher(
          */
         fun candidate(
             reading: Reading, region: CropRegion, frame: GrayFrame? = null, keepPrompts: Boolean = false, auto: Boolean = false,
-            styled: Boolean = false, color: ((Int, Int) -> Int)? = null, menu: Boolean = false,
+            styled: Boolean = false, color: ((Int, Int) -> Int)? = null, menu: Boolean = false, kind: ScreenTextKind? = null,
         ): Candidate {
+            // Ekran yazısı (otomatik alan, oyunun hazır yardım/mesaj alanı; [kind]: [ScreenTextKind.of]): simge ve bozuk okuma
+            // süzgeçleri menü durumundan bağımsız (#1365 beta.105: menü düşünce "KM Collect…", "ocdich for the onurn Ape"
+            // geçip motora gidiyordu).
+            val screenText = auto || kind == ScreenTextKind.HELP || kind == ScreenTextKind.PHONE
             // Fiilsiz yerlerdeki simgeler (tuş çubuğu, satır ucu) karede doğrulanır; otomatik alanda yalnız renksiz simgeler
             // ([color]), satır ucundaki simge çeviriye girmez (Mac ve Windows ile aynı).
             val marked = if (frame == null) reading.withButtonIcons() else reading.withButtonIcons(frame, color, monochrome = auto)
@@ -500,18 +506,22 @@ class RegionWatcher(
             // Otomatik alanda etiketin sonuna tuş simgesinden okunan tek harf ("RADIO CONTROLS f") çeviriye girmez (#1362).
             val read = (if (keepPrompts) marked else marked.withoutButtonPrompts()).withoutOcrNoise().lines
                 // Menü satırının başındaki görev simgesi ("KM", "KK"; daire içinde harfler) yazı değildir (#1365).
-                .map { if (auto && menu) ScreenTranslation.withoutBadge(it) else it }
+                .map { if (screenText) ScreenTranslation.withoutBadge(it) else it }
                 .flatMap { ScreenTranslation.menuPieces(it, aspect, frame) }
+                // Bölünmeyen sekme şeridi arayüz sözlüğüyle bölünür ("JASON LUCIA MAP BRIEF PROGRESS", #1375).
+                .flatMap { if (auto) ScreenTranslation.glossaryPieces(it) else listOf(it) }
+                // Ekran yazısında bozuk okuma (düşük güven, tuhaf harfler) atılır.
+                .filter { !screenText || !ScreenTextNoise.isGarbled(it) }
                 .map(ScreenTranslation::withoutEdgeMarks)
                 .map(ScreenTranslation::withoutEdgeIcons)
                 .map { if (auto) it.copy(text = UiCommands.withoutKeyGlyph(it.text)) else it }
                 .filter { ScreenText.isWords(it.text) }
                 .filter { !stylish || !ScreenTranslation.isClock(it.text) }
                 .sortedBy { it.box?.top ?: 0.0 }
-            // Menüde güveni düşük okunan satır (bozuk okuma: "scarch rol the onuin Ape", "AUD MARNER") çeviri motoruna
-            // gitmez; satır bu okumada yok sayılır, gösterilen çevirisi yerinde kalır, temiz okumada çevrilir (#1365).
-            val unsure = if (auto && menu) read.filter(ScreenTextNoise::isUnsure).map { it.text } else emptyList()
-            val lines = ScreenTranslation.withoutDuplicateLines(if (auto && menu) read.filterNot(ScreenTextNoise::isUnsure) else read)
+            // Ekran yazısında güveni düşük okunan satır (bozuk okuma: "scarch rol the onuin Ape", "AUD MARNER") çeviri
+            // motoruna gitmez; satır bu okumada yok sayılır, gösterilen çevirisi yerinde kalır, temiz okumada çevrilir (#1365).
+            val unsure = if (screenText) read.filter(ScreenTextNoise::isUnsure).map { it.text } else emptyList()
+            val lines = ScreenTranslation.withoutDuplicateLines(if (screenText) read.filterNot(ScreenTextNoise::isUnsure) else read)
             var paragraphs = ScreenText.paragraphs(lines)
             val boxes = lines.mapNotNull { it.box }
             val box = boxes.reduceOrNull { a, b -> a.union(b) }?.placedIn(region.box)
@@ -940,6 +950,66 @@ class RegionWatcher(
                 block.box to (if (block.start < end) candidate.paragraphs.subList(block.start, end).joinToString(" ") else "")
             }
 
+        /**
+         * Yazı taşıyan bloklar (#1365 beta.105: haritada boş koyu kutular): Türkçesinde harf, rakam ya da kumanda simgesi
+         * olmayan blok (boş çeviri, yalnız görev imi) çizilmez. Mac/iPhone ve Windows aynı.
+         */
+        internal fun drawable(items: List<ScreenTranslation.Item>): List<ScreenTranslation.Item> =
+            items.filter { item -> !item.icons.isNullOrEmpty() || IconText.plain(item.translation).any { it.isLetter() || it.isDigit() } }
+
+        /** En çok bu kadar satırın kipi hatırlanır; aşılınca yalnız bu okumanın satırları kalır. */
+        const val ROW_PAINT_LIMIT = 128
+        /** Satır bundan fazla yana kaydıysa (kareye oranla) eski yanına yazma/ikiz ölçüleri taşınmaz, satır örtülür. */
+        const val ROW_PAINT_SHIFT = 0.02
+
+        /**
+         * Satır başına sabit çizim kipi (#1365 beta.105, #1364'ün satır farkının devamı): kip her okumada boş alana bakılarak
+         * yeniden seçiliyordu; aynı satır art arda okumalarda örtü, yan ya da ikiz oluyordu (bir oturumda 237 yan, 139 örtü,
+         * 37 ikiz). Satırın kipi ilk çiziminde seçilir ve yazısı aynı kaldıkça değişmez:
+         * - Yeni ölçüm aynı kipi verdiyse yeni ölçüler kullanılır (satır kaydıysa yeni yeri).
+         * - Başka kip verdiyse: satır önceden örtülüyorsa yine örtülür (yeni yerinde); yanına yazılıyor ya da ikizdeyse eski
+         *   ölçüler satırın yeni yerine taşınır. Satır yana kaydıysa ([ROW_PAINT_SHIFT]) eski ölçüler taşınamaz; satır örtülür
+         *   ve bundan sonra hep örtülür (kip en çok bir kez, örtüye döner).
+         * - [map]: harita düzeninde ikiz kutu çizilmez (haritanın üstünde yüzen kutular); ikiz seçilen blok örtülür.
+         * Mac/iPhone (RegionWatcher.steadyPaints) ve Windows (RegionWatcher.SteadyPaints) aynı.
+         */
+        internal fun steadyPaints(blocks: List<Block>, texts: List<String>, memory: MutableMap<String, RowPaint>, map: Boolean): List<Block> {
+            val seen = HashSet<String>()
+            val result = blocks.mapIndexed { i, block ->
+                var paint = block.paint ?: return@mapIndexed block
+                if (map && paint.mode == TextPaint.MODE_TWIN) paint = coverOnly(paint)
+                val key = if (i < texts.size) textKey(listOf(IconText.plain(texts[i]))) else ""
+                if (key.isEmpty()) return@mapIndexed block.copy(paint = paint)
+                seen.add(key)
+                val box = block.box
+                val kept = memory[key]
+                if (kept != null && kept.mode != paint.mode) {
+                    val dx = box.left - kept.box.left
+                    val dy = box.top - kept.box.top
+                    paint = if (kept.mode == TextPaint.MODE_COVER || kotlin.math.abs(dx) > ROW_PAINT_SHIFT) coverOnly(paint)
+                        else shifted(kept.paint, dx, dy)
+                }
+                memory[key] = RowPaint(paint.mode, paint, box)
+                block.copy(paint = paint)
+            }
+            if (memory.size > ROW_PAINT_LIMIT) memory.keys.retainAll(seen)
+            return result
+        }
+
+        /** Ölçünün yalnız örtüsü (yanına yazma ve ikiz bilgisi atılır). */
+        internal fun coverOnly(paint: TextPaint): TextPaint = paint.copy(
+            mode = TextPaint.MODE_COVER, spot = null, spotRoom = null, twin = null, radius = 0.0, scale = 1.0, tail = null,
+            portrait = null, portraitTwin = null, portraitImage = null, edge = null,
+        )
+
+        /** Ölçünün bütün kutuları ([dx], [dy]) kadar kaymış hâli. */
+        internal fun shifted(paint: TextPaint, dx: Double, dy: Double): TextPaint {
+            fun move(box: TextBox?) = box?.let { TextBox(it.left + dx, it.top + dy, it.right + dx, it.bottom + dy) }
+            return paint.copy(cover = move(paint.cover)!!, grow = move(paint.grow), spot = move(paint.spot),
+                spotRoom = move(paint.spotRoom), twin = move(paint.twin), portrait = move(paint.portrait),
+                portraitTwin = move(paint.portraitTwin))
+        }
+
         /** [cutAtAreaEdge] payı (karo genişliği cinsinden). */
         const val AREA_EDGE_TILES = 0.25
 
@@ -1072,8 +1142,13 @@ class RegionWatcher(
             // cümlenin yalnız bir kısmını kapatıyordu. Hazır alana en az bir karo taşan otomatik alan varken hazır alan o turda
             // okunmaz; hazır alanın içinde kalan (alanının en az [PRESET_INSIDE_SHARE]'i) otomatik alan ise okunmaz (hazır
             // alan okuyor, eskisi gibi).
+            //
+            // Menü ya da harita düzeni sürerken (menüde otomatik alan varken) hazır alanlar hiç okunmaz (#1365 beta.105):
+            // ekranın yazıları menü alanlarında okunuyor; hazır yardım/mesaj alanı aynı ekranı yeniden okuyup listenin
+            // satırlarını haritanın üstünde yüzen ikiz kutulara, kartın üstüne yarım örtülere yazıyordu.
             val presets = areas.filter { GameAreaPresets.isPreset(it.id) }.map { it.region }
             if (presets.isEmpty()) return areas
+            if (areas.any { it.auto && it.menu }) return areas.filter { !GameAreaPresets.isPreset(it.id) }
             fun overlap(a: CropRegion, b: CropRegion): Pair<Double, Double> =
                 maxOf(0.0, minOf(a.right, b.right) - maxOf(a.left, b.left)) to
                     maxOf(0.0, minOf(a.bottom, b.bottom) - maxOf(a.top, b.top))
@@ -1174,6 +1249,9 @@ class RegionWatcher(
         val mission: Boolean = false,
     )
 
+    /** Satırın bir kez seçilen çizim kipi ve o andaki ölçüleri ([steadyPaints]). */
+    internal data class RowPaint(val mode: String, val paint: TextPaint, val box: TextBox)
+
     /**
      * [icons]: her parçadaki kumanda simgeleri (kareden kesilmiş), parçadaki sırasıyla. [blocks]: alanda birden çok ayrı
      * yazı grubu varsa grupları; tek grupta null (tek kutu). [text]: yazının sadeleştirilmiş hâli (simgeler dahil,
@@ -1250,6 +1328,8 @@ class RegionWatcher(
     private val steadiness = HashMap<String, Steadiness>()
     /** Son turda öbürüne yol verdiği için okunmayan alanlar ([yieldingPresets]; günlüğe değişince yazılır). */
     @Volatile private var yieldLogged = emptySet<String>()
+    /** Satırların bir kez seçilen çizim kipi ([steadyPaints]); satırın yazısıyla anılır. */
+    private val rowPaints = HashMap<String, RowPaint>()
     private var lastPass: Long? = null
     private var busy = false
     @Volatile private var session = 0
@@ -1568,7 +1648,7 @@ class RegionWatcher(
         // özgün stilinde, grup grup ve çizim kipiyle (yanına yazma, ikiz kutu) çizilir: önceden tek kutu tuş simgelerinin
         // üstünü örtüyor, yazı boyu her okumada alanın kutusuna göre değişiyordu. Mac ve Windows aynı.
         var candidate = candidate(text, area.region, crop.frame, keepPrompts = area.menu, auto = area.auto, styled = true,
-            color = crop.color, menu = area.menu)
+            color = crop.color, menu = area.menu, kind = ScreenTextKind.of(area))
         if (candidate.unsure != state.unsureLogged) {
             state.unsureLogged = candidate.unsure
             if (candidate.unsure.isNotEmpty()) {
@@ -1623,6 +1703,15 @@ class RegionWatcher(
             val plain = candidate
             candidate = timing.measure(STAGE_PAINT) { styled(plain, text, area.region, crop.frame, crop.color, modes = true,
                 kind = ScreenTextKind.of(area), screen = crop.screen, screenColor = crop.screenColor) }
+        }
+        // Satırın çizim kipi bir kez seçilir ([steadyPaints]); harita düzeninde ikiz kutu yok.
+        candidate.blocks?.let { blocks ->
+            val steady = synchronized(rowPaints) {
+                steadyPaints(blocks, blockTexts(candidate).map { it.second }, rowPaints, area.map)
+            }
+            val kept = blocks.zip(steady).count { (a, b) -> a.paint?.mode != b.paint?.mode }
+            candidate = candidate.copy(blocks = steady)
+            if (kept > 0) onLog?.invoke("ek alan ${area.name}: $kept satırın çizim kipi korundu${if (area.map) " (harita düzeni)" else ""}")
         }
         state.rejectPending = false
         // Çevirisi gösterilen alanda art arda boş okuma (görüntü değişirken) yazının gittiğini tek başına kanıtlamaz: kaldırma
@@ -1691,7 +1780,7 @@ class RegionWatcher(
                     kept.sortWith(compareBy({ it.second.box.top }, { it.second.box.left }))
                     val text = kept.joinToString("\n") { it.second.translation }
                     synchronized(lock) {
-                        if (started == session) sender.sendRegion(area.id, text, candidate.box, candidate.lineHeight, null, kept.map { it.second })
+                        if (started == session) sendBlocks(area, text, candidate.box, candidate.lineHeight, null, kept.map { it.second })
                     }
                     state.shownText = candidate.text
                     state.renderedText = text
@@ -1826,6 +1915,25 @@ class RegionWatcher(
         }
     }
 
+    /**
+     * Bloklu çeviriyi TV'ye gönderir; boş kutu çizilmez ([drawable]): bloklardan hiçbiri yazı taşımıyorsa alanın kutusu
+     * kalkar.
+     */
+    private fun sendBlocks(area: ExtraArea, text: String, box: TextBox?, lineHeight: Double?, icons: List<IconPlacement>?,
+                     blocks: List<ScreenTranslation.Item>?) {
+        if (blocks == null) {
+            sender.sendRegion(area.id, text, box, lineHeight, icons, null)
+            return
+        }
+        val shown = drawable(blocks)
+        if (shown.size < blocks.size) onLog?.invoke("ek alan ${area.name}: ${blocks.size - shown.size} boş kutu çizilmedi")
+        if (shown.isEmpty()) {
+            sender.sendRegion(area.id, "", null, null)
+            return
+        }
+        sender.sendRegion(area.id, text, box, lineHeight, icons, shown)
+    }
+
     private fun commit(candidate: Candidate, area: ExtraArea, state: State, started: Int) {
         // reset() ve TV'ye gönderim sıralı kalmalı: eski tur yeni oyunun üstüne yazmasın.
         fun send(action: () -> Unit): Unit = synchronized(lock) { if (started == session) action() }
@@ -1844,7 +1952,7 @@ class RegionWatcher(
                     surface = style?.surface ?: item.surface, look = style?.look ?: item.look,
                     paint = current[group].paint ?: item.paint)
             }
-            send { sender.sendRegion(area.id, text, candidate.box, candidate.lineHeight, state.renderedIcons, moved?.map { it.second }) }
+            send { sendBlocks(area, text, candidate.box, candidate.lineHeight, state.renderedIcons, moved?.map { it.second }) }
             state.renderedBox = candidate.box
             state.renderedLineHeight = candidate.lineHeight
             state.renderedLayout = candidate.blocks
@@ -1944,7 +2052,7 @@ class RegionWatcher(
                 val diff = carriedRows(carried.map { it.second }, blockTexts(candidate), listMoved = false)
                 blocks = blocks + diff.kept.filter { it.second == null }.map { -1 to carried[it.first].second }
             }
-            send { sender.sendRegion(area.id, rendered.text, candidate.box, candidate.lineHeight, icons, blocks?.map { it.second }) }
+            send { sendBlocks(area, rendered.text, candidate.box, candidate.lineHeight, icons, blocks?.map { it.second }) }
             state.renderedText = rendered.text
             state.renderedIcons = icons
             state.renderedBox = candidate.box
@@ -2136,6 +2244,7 @@ class RegionWatcher(
         val anyShown = states.values.any { it.shown.isNotEmpty() || !it.renderedText.isNullOrEmpty() }
         states.clear()
         synchronized(steadiness) { steadiness.clear() }
+        synchronized(rowPaints) { rowPaints.clear() }
         if (anyShown) sender.clearRegions()
     }
 }

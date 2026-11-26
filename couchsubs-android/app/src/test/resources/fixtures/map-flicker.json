@@ -1,0 +1,1118 @@
+{
+ "about": "Titreyen harita düzeni (#1365 beta.105, #1391): seçim değişince oyun haritayı kaydırıyor, karartıp yakınlaştırıyor; düzen tanınınca bu sırada düşmemeli (tek 'bulundu', harita kapanınca tek 'bitti'). Sahne çizimi Fixtures/map-layout.json ile aynı (ortak çizici: MapLayoutTests). 'phases' art arda oynatılır; her evre 'untilMs' sürer (100 ms arayla örnek, zaman evreler boyunca sürer). 'everySample': evrenin her örneğinde 'mapLayout' beklenen değerde; değilse yalnız evrenin sonunda. Evre sonunda: 'menu', 'mapLayout'; 'together': rolün yazıları tek alanda; 'clipped': rolün alanı panelin kenarında biter (haritaya taşmaz) ve harita düzeni alanı ('map'); 'presetsYield': GTA 6 hazır alanları (Help, Messages) hiç okunmaz. 'notes': bütün oynatmada günlüğe kaç kez 'harita düzeni bulundu' ve 'harita düzeni bitti' yazıldığı. 'paints': satır başına çizim kipi (RegionWatcher.steadyPaints): her 'reads' okumasında ölçücünün verdiği kip ('mode') ne olursa olsun satırın kipi 'expected'; 'map' iken ikiz yok. 'translation' boş ya da yalnız boşluk/im olan satır çizilmez (RegionWatcher.drawable). Kutular [sol, üst, sağ, alt], kareye oranla. Mac MapFlickerTests.swift, Windows MapFlickerTests.cs ve Android MapFlickerTest.kt aynı dosyayı okur.",
+ "phases": [
+  {
+   "name": "harita tanınıyor",
+   "map": 150,
+   "texture": true,
+   "moving": false,
+   "panel": {
+    "side": "left",
+    "columns": 9,
+    "fill": 45
+   },
+   "boxes": [
+    {
+     "cells": [
+      17,
+      7,
+      25,
+      10
+     ],
+     "fill": 30
+    }
+   ],
+   "texts": [
+    {
+     "role": "list",
+     "column": 1,
+     "row": 1,
+     "width": 3,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 2,
+     "width": 5,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 3,
+     "width": 4,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 4,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 5,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 6,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 7,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 8,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 7,
+     "width": 5,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 8,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 9,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "bar",
+     "column": 27,
+     "row": 12,
+     "width": 3,
+     "kind": "outlined"
+    },
+    {
+     "role": "bar",
+     "column": 27,
+     "row": 13,
+     "width": 3,
+     "kind": "outlined"
+    },
+    {
+     "role": "bar",
+     "column": 26,
+     "row": 14,
+     "width": 4,
+     "kind": "outlined"
+    }
+   ],
+   "untilMs": 1500,
+   "everySample": false,
+   "expect": {
+    "menu": true,
+    "mapLayout": true,
+    "together": [
+     "list"
+    ],
+    "presetsYield": true,
+    "clipped": [
+     "list"
+    ]
+   }
+  },
+  {
+   "name": "seçim değişti: harita kayıyor",
+   "map": 150,
+   "texture": true,
+   "moving": true,
+   "panel": {
+    "side": "left",
+    "columns": 9,
+    "fill": 45
+   },
+   "boxes": [
+    {
+     "cells": [
+      17,
+      7,
+      25,
+      10
+     ],
+     "fill": 30
+    }
+   ],
+   "texts": [
+    {
+     "role": "list",
+     "column": 1,
+     "row": 1,
+     "width": 3,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 2,
+     "width": 5,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 3,
+     "width": 4,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 4,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 5,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 6,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 7,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 8,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 7,
+     "width": 5,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 8,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 9,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "bar",
+     "column": 27,
+     "row": 12,
+     "width": 3,
+     "kind": "outlined"
+    },
+    {
+     "role": "bar",
+     "column": 27,
+     "row": 13,
+     "width": 3,
+     "kind": "outlined"
+    },
+    {
+     "role": "bar",
+     "column": 26,
+     "row": 14,
+     "width": 4,
+     "kind": "outlined"
+    }
+   ],
+   "untilMs": 1500,
+   "everySample": true,
+   "expect": {
+    "menu": true,
+    "mapLayout": true,
+    "together": [
+     "list"
+    ],
+    "presetsYield": true,
+    "clipped": [
+     "list"
+    ]
+   }
+  },
+  {
+   "name": "harita kararıyor ve yakınlaşıyor",
+   "map": 70,
+   "texture": false,
+   "moving": false,
+   "panel": {
+    "side": "left",
+    "columns": 9,
+    "fill": 45
+   },
+   "boxes": [
+    {
+     "cells": [
+      17,
+      7,
+      25,
+      10
+     ],
+     "fill": 30
+    }
+   ],
+   "texts": [
+    {
+     "role": "list",
+     "column": 1,
+     "row": 1,
+     "width": 3,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 2,
+     "width": 5,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 3,
+     "width": 4,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 4,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 5,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 6,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 7,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 8,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 7,
+     "width": 5,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 8,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 9,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "bar",
+     "column": 27,
+     "row": 12,
+     "width": 3,
+     "kind": "outlined"
+    },
+    {
+     "role": "bar",
+     "column": 27,
+     "row": 13,
+     "width": 3,
+     "kind": "outlined"
+    },
+    {
+     "role": "bar",
+     "column": 26,
+     "row": 14,
+     "width": 4,
+     "kind": "outlined"
+    }
+   ],
+   "untilMs": 800,
+   "everySample": true,
+   "expect": {
+    "menu": true,
+    "mapLayout": true,
+    "together": [
+     "list"
+    ],
+    "presetsYield": true,
+    "clipped": [
+     "list"
+    ]
+   }
+  },
+  {
+   "name": "harita yeniden yerinde",
+   "map": 150,
+   "texture": true,
+   "moving": false,
+   "panel": {
+    "side": "left",
+    "columns": 9,
+    "fill": 45
+   },
+   "boxes": [
+    {
+     "cells": [
+      17,
+      7,
+      25,
+      10
+     ],
+     "fill": 30
+    }
+   ],
+   "texts": [
+    {
+     "role": "list",
+     "column": 1,
+     "row": 1,
+     "width": 3,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 2,
+     "width": 5,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 3,
+     "width": 4,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 4,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 5,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 6,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 7,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 8,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 7,
+     "width": 5,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 8,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 9,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "bar",
+     "column": 27,
+     "row": 12,
+     "width": 3,
+     "kind": "outlined"
+    },
+    {
+     "role": "bar",
+     "column": 27,
+     "row": 13,
+     "width": 3,
+     "kind": "outlined"
+    },
+    {
+     "role": "bar",
+     "column": 26,
+     "row": 14,
+     "width": 4,
+     "kind": "outlined"
+    }
+   ],
+   "untilMs": 1000,
+   "everySample": true,
+   "expect": {
+    "menu": true,
+    "mapLayout": true,
+    "together": [
+     "list"
+    ],
+    "presetsYield": true,
+    "clipped": [
+     "list"
+    ]
+   }
+  },
+  {
+   "name": "harita kayıyor (ikinci kez)",
+   "map": 150,
+   "texture": true,
+   "moving": true,
+   "panel": {
+    "side": "left",
+    "columns": 9,
+    "fill": 45
+   },
+   "boxes": [
+    {
+     "cells": [
+      17,
+      7,
+      25,
+      10
+     ],
+     "fill": 30
+    }
+   ],
+   "texts": [
+    {
+     "role": "list",
+     "column": 1,
+     "row": 1,
+     "width": 3,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 2,
+     "width": 5,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 3,
+     "width": 4,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 4,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 5,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 6,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 7,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "list",
+     "column": 1,
+     "row": 8,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 7,
+     "width": 5,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 8,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 9,
+     "width": 6,
+     "kind": "dark"
+    },
+    {
+     "role": "bar",
+     "column": 27,
+     "row": 12,
+     "width": 3,
+     "kind": "outlined"
+    },
+    {
+     "role": "bar",
+     "column": 27,
+     "row": 13,
+     "width": 3,
+     "kind": "outlined"
+    },
+    {
+     "role": "bar",
+     "column": 26,
+     "row": 14,
+     "width": 4,
+     "kind": "outlined"
+    }
+   ],
+   "untilMs": 700,
+   "everySample": true,
+   "expect": {
+    "menu": true,
+    "mapLayout": true,
+    "together": [
+     "list"
+    ],
+    "presetsYield": true,
+    "clipped": [
+     "list"
+    ]
+   }
+  },
+  {
+   "name": "harita kapandı: kamera oynayan oyun sahnesi",
+   "map": 150,
+   "texture": true,
+   "moving": true,
+   "panel": null,
+   "boxes": [
+    {
+     "cells": [
+      17,
+      7,
+      25,
+      10
+     ],
+     "fill": 30
+    }
+   ],
+   "texts": [
+    {
+     "role": "card",
+     "column": 18,
+     "row": 7,
+     "width": 5,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 8,
+     "width": 7,
+     "kind": "dark"
+    },
+    {
+     "role": "card",
+     "column": 18,
+     "row": 9,
+     "width": 6,
+     "kind": "dark"
+    }
+   ],
+   "untilMs": 1200,
+   "everySample": false,
+   "expect": {
+    "menu": false,
+    "mapLayout": false
+   }
+  }
+ ],
+ "notes": {
+  "found": 1,
+  "ended": 1
+ },
+ "paints": [
+  {
+   "name": "harita düzeni: kip ilk çizimde seçilir, ikiz yok",
+   "map": true,
+   "expected": {
+    "Rob Vicki's Boss": "beside",
+    "Collect Chemicals for Kyle": "cover",
+    "Meet Bret": "cover",
+    "GOAL": "beside",
+    "Save for the Future": "cover",
+   "Search for the Skunk Ape": "beside"
+   },
+   "reads": [
+    [
+     {
+      "text": "Rob Vicki's Boss",
+      "box": [
+       0.02,
+       0.1,
+       0.2,
+       0.14
+      ],
+      "mode": "beside",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Collect Chemicals for Kyle",
+      "box": [
+       0.02,
+       0.16,
+       0.26,
+       0.2
+      ],
+      "mode": "cover",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Meet Bret",
+      "box": [
+       0.02,
+       0.22,
+       0.14,
+       0.26
+      ],
+      "mode": "twin",
+      "translation": "çeviri"
+     },
+     {
+      "text": "GOAL",
+      "box": [
+       0.56,
+       0.4,
+       0.62,
+       0.44
+      ],
+      "mode": "beside",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Save for the Future",
+      "box": [
+       0.56,
+       0.46,
+       0.78,
+       0.56
+      ],
+      "mode": "twin",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Search for the Skunk Ape",
+      "box": [
+       0.02,
+       0.28,
+       0.16,
+       0.32
+      ],
+      "mode": "beside",
+      "translation": ""
+     }
+    ],
+    [
+     {
+      "text": "Rob Vicki's Boss",
+      "box": [
+       0.02,
+       0.1,
+       0.2,
+       0.14
+      ],
+      "mode": "cover",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Collect Chemicals for Kyle",
+      "box": [
+       0.02,
+       0.16,
+       0.26,
+       0.2
+      ],
+      "mode": "beside",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Meet Bret",
+      "box": [
+       0.02,
+       0.22,
+       0.14,
+       0.26
+      ],
+      "mode": "beside",
+      "translation": "çeviri"
+     },
+     {
+      "text": "GOAL",
+      "box": [
+       0.56,
+       0.4,
+       0.62,
+       0.44
+      ],
+      "mode": "twin",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Save for the Future",
+      "box": [
+       0.56,
+       0.46,
+       0.78,
+       0.56
+      ],
+      "mode": "beside",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Search for the Skunk Ape",
+      "box": [
+       0.02,
+       0.28,
+       0.16,
+       0.32
+      ],
+      "mode": "cover",
+      "translation": "  "
+     }
+    ],
+    [
+     {
+      "text": "Rob Vicki's Boss",
+      "box": [
+       0.02,
+       0.16,
+       0.2,
+       0.2
+      ],
+      "mode": "twin",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Collect Chemicals for Kyle",
+      "box": [
+       0.02,
+       0.22,
+       0.26,
+       0.26
+      ],
+      "mode": "twin",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Meet Bret",
+      "box": [
+       0.02,
+       0.28,
+       0.14,
+       0.32
+      ],
+      "mode": "cover",
+      "translation": "çeviri"
+     },
+     {
+      "text": "GOAL",
+      "box": [
+       0.56,
+       0.4,
+       0.62,
+       0.44
+      ],
+      "mode": "cover",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Save for the Future",
+      "box": [
+       0.56,
+       0.46,
+       0.78,
+       0.56
+      ],
+      "mode": "twin",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Search for the Skunk Ape",
+      "box": [
+       0.02,
+       0.34,
+       0.16,
+       0.38
+      ],
+      "mode": "twin",
+      "translation": "◆"
+     }
+    ],
+    [
+     {
+      "text": "Rob Vicki's Boss",
+      "box": [
+       0.02,
+       0.1,
+       0.2,
+       0.14
+      ],
+      "mode": "beside",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Collect Chemicals for Kyle",
+      "box": [
+       0.02,
+       0.16,
+       0.26,
+       0.2
+      ],
+      "mode": "cover",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Meet Bret",
+      "box": [
+       0.02,
+       0.22,
+       0.14,
+       0.26
+      ],
+      "mode": "twin",
+      "translation": "çeviri"
+     },
+     {
+      "text": "GOAL",
+      "box": [
+       0.56,
+       0.4,
+       0.62,
+       0.44
+      ],
+      "mode": "beside",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Save for the Future",
+      "box": [
+       0.56,
+       0.46,
+       0.78,
+       0.56
+      ],
+      "mode": "cover",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Search for the Skunk Ape",
+      "box": [
+       0.02,
+       0.28,
+       0.16,
+       0.32
+      ],
+      "mode": "beside",
+      "translation": "Skunk Ape'i Ara"
+     }
+    ]
+   ],
+   "drawn": [
+    [
+     "Rob Vicki's Boss",
+     "Collect Chemicals for Kyle",
+     "Meet Bret",
+     "GOAL",
+     "Save for the Future"
+    ],
+    [
+     "Rob Vicki's Boss",
+     "Collect Chemicals for Kyle",
+     "Meet Bret",
+     "GOAL",
+     "Save for the Future"
+    ],
+    [
+     "Rob Vicki's Boss",
+     "Collect Chemicals for Kyle",
+     "Meet Bret",
+     "GOAL",
+     "Save for the Future"
+    ],
+    [
+     "Rob Vicki's Boss",
+     "Collect Chemicals for Kyle",
+     "Meet Bret",
+     "GOAL",
+     "Save for the Future",
+     "Search for the Skunk Ape"
+    ]
+   ]
+  },
+  {
+   "name": "menü dışı: kutu ikizde kalır, satır kayınca ölçüsü taşınır",
+   "map": false,
+   "expected": {
+    "Pay 'N' Spray": "twin",
+    "Garage offering repairs": "twin"
+   },
+   "reads": [
+    [
+     {
+      "text": "Pay 'N' Spray",
+      "box": [
+       0.6,
+       0.3,
+       0.74,
+       0.34
+      ],
+      "mode": "twin",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Garage offering repairs",
+      "box": [
+       0.6,
+       0.35,
+       0.8,
+       0.39
+      ],
+      "mode": "twin",
+      "translation": "çeviri"
+     }
+    ],
+    [
+     {
+      "text": "Pay 'N' Spray",
+      "box": [
+       0.6,
+       0.32,
+       0.74,
+       0.36
+      ],
+      "mode": "cover",
+      "translation": "çeviri"
+     },
+     {
+      "text": "Garage offering repairs",
+      "box": [
+       0.6,
+       0.37,
+       0.8,
+       0.41
+      ],
+      "mode": "beside",
+      "translation": "çeviri"
+     }
+    ]
+   ],
+   "drawn": [
+    [
+     "Pay 'N' Spray",
+     "Garage offering repairs"
+    ],
+    [
+     "Pay 'N' Spray",
+     "Garage offering repairs"
+    ]
+   ]
+  }
+ ]
+}

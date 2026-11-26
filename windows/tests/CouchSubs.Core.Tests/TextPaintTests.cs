@@ -505,6 +505,9 @@ public class TextPaintTests
         menu = menu with { Menu = true };
         Assert.Equal(["auto-1"], RegionWatcher.YieldingPresets([phone, menu]).Select(a => a.Id));
         menu = menu with { Region = new CropRegion(0.05, 0.12, 0.4, 0.9) };
+        // #1365 beta.105: menü sürerken hazır alan kesişmese de okunmaz (aynı ekranı yeniden okuyup ikiz kutu çiziyordu).
+        Assert.Equal(["auto-1"], RegionWatcher.YieldingPresets([phone, menu]).Select(a => a.Id));
+        menu = menu with { Menu = false };
         Assert.Equal([phone.Id, "auto-1"], RegionWatcher.YieldingPresets([phone, menu]).Select(a => a.Id));
     }
 }

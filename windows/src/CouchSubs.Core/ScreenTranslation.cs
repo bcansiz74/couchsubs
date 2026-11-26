@@ -616,6 +616,61 @@ public static class ScreenTranslation
     }
 
     /// <summary>
+    /// Bölünmeyen sekme şeridi (#1375, beta.105: "JASON LUCIA HARİTASI ÖZETİLERLEME"): görüntüdeki boşluk sekmeleri
+    /// ayırmadığında (sekmeler sık, seçili sekme renkli) BÜYÜK HARFLİ satır arayüz sözlüğüne göre bölünür. Satır baştan
+    /// sona sözlükteki etiketlerden (en uzun eşleşme önce: "SET DESTINATION", "ADD MARKER" tek etikettir), "AD &amp; AD" ya
+    /// da karakter adı çiftinden ("JASON LUCIA") oluşmalı; en az üç parça ya da bir ad çifti olmalı (iki sözlük sözcüklü
+    /// gerçek etiket bölünmez). Her parçanın kutusu sözcük kutularından (yoksa harf sayısından kestirilir). Simgeli satıra
+    /// dokunulmaz. Mac ve Android aynı.
+    /// </summary>
+    public static IReadOnlyList<TextLine> GlossaryPieces(TextLine line)
+    {
+        if (line.Box is not { } box || line.Text.Contains(ButtonIcons.Marker) || line.Icons is { Count: > 0 }
+            || !TextStyleSampler.IsUpper(line.Text)) return [line];
+        var words = line.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length < 2) return [line];
+        var segments = new List<(int Start, int End)>();
+        var names = false;
+        for (var i = 0; i < words.Length;)
+        {
+            if (i + 2 < words.Length && words[i + 1] == "&" && words[i].Any(char.IsLetter) && words[i + 2].Any(char.IsLetter))
+            {
+                segments.Add((i, i + 3));
+                names = true;
+                i += 3;
+                continue;
+            }
+            if (i + 1 < words.Length && IsNamePair(words[i] + " " + words[i + 1]))
+            {
+                segments.Add((i, i + 2));
+                names = true;
+                i += 2;
+                continue;
+            }
+            var end = Math.Min(words.Length, i + GlossaryReach);
+            while (end > i && UiCommands.TranslateLabel(string.Join(' ', words[i..end])) is null) end--;
+            if (end == i) return [line];
+            segments.Add((i, end));
+            i = end;
+        }
+        if (segments.Count < 3 && !(names && segments.Count >= 2)) return [line];
+        var measured = (line.Words?.Count ?? 0) == words.Length;
+        var spans = measured ? line.Words! : ButtonIcons.Estimate(line.Text, box);
+        if (spans.Count != words.Length) return [line];
+        return [.. segments.Select(segment =>
+        {
+            var span = spans.Skip(segment.Start).Take(segment.End - segment.Start).Select(word => word.Box)
+                .Aggregate((a, b) => a.Union(b));
+            return new TextLine(string.Join(' ', words[segment.Start..segment.End]),
+                                new TextBox(span.Left, box.Top, span.Right, box.Bottom), line.Confidence,
+                                measured ? [.. spans.Skip(segment.Start).Take(segment.End - segment.Start)] : null);
+        })];
+    }
+
+    /// <summary>Sözlük etiketinin en çok sözcük sayısı (<see cref="GlossaryPieces"/>).</summary>
+    internal const int GlossaryReach = 3;
+
+    /// <summary>
     /// Satırın yazı boyu: sözcük kutularının ortanca yüksekliği (satır kutusundan büyük değil). Satıra katılan simge
     /// harflerden uzundur; satır kutusunu, onunla sekme boşluğu eşiğini de büyütüyordu (#1372). Mac ve Android aynı.
     /// </summary>
@@ -816,13 +871,16 @@ public static class ScreenTranslation
     /// kimyasalları topluyor") ve kutu simgenin üstünü örtüyordu. Baştaki bir-iki BÜYÜK harflik sözcük, ardında büyük harfle
     /// başlayan ve küçük harf taşıyan (BÜYÜK HARFLİ olmayan) en az iki sözcük varsa simgedir: atılır, kutu ikinci sözcükten
     /// başlar. Gerçek kısa sözcükler (<see cref="BadgeWords"/>: "A", "I", "OK", "TV", "DJ"…) dokunulmaz. Mac ve Android aynı.
+    /// Büyük-küçük karışık okunan simge de ("Kh", "Kk"; beta.105) simgedir: ilk harfi büyük, ikincisi küçük, gerçek iki
+    /// harfli sözcük değil ("Go", "No", "Do" <see cref="BadgeWords"/>'te).
     /// </summary>
     public static TextLine WithoutBadge(TextLine line)
     {
         var tokens = line.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (tokens.Length < 3) return line;
         var head = tokens[0];
-        if (head.Length is < 1 or > 2 || !head.All(c => char.IsLetter(c) && char.IsUpper(c)) || BadgeWords.Contains(head)) return line;
+        if (head.Length is < 1 or > 2 || !head.All(char.IsLetter) || !char.IsUpper(head[0])
+            || BadgeWords.Contains(head.ToUpperInvariant())) return line;
         var rest = tokens[1..];
         if (!char.IsUpper(rest[0][0]) || !string.Concat(rest).Any(char.IsLower)) return line;
         var trimmed = line with { Text = string.Join(' ', rest) };
@@ -842,6 +900,8 @@ public static class ScreenTranslation
     {
         "A", "I", "O", "OK", "TV", "DJ", "UK", "US", "UN", "LA", "NY", "MR", "DR", "MS",
         "ST", "PS", "AI", "HQ", "ID", "EU", "OF", "IN", "ON", "TO", "MY", "NO", "GO", "UP",
+        "AM", "AN", "AS", "AT", "BE", "BY", "DO", "HE", "HI", "IF", "IS", "IT", "ME", "OH",
+        "OR", "SO", "WE", "YO", "OI", "AH", "HA", "EH", "UH", "UM", "OX", "JR", "SR", "VS",
     };
 
     /// <summary>

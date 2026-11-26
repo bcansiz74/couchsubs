@@ -462,6 +462,38 @@
      ]
     }
    ]
+  },
+  {
+   "name": "şerit tek satır, sözcük kutusu ve simge yok, boşluk sekmeleri ayırmıyor: arayüz sözlüğüyle bölünür (#1375, beta.105)",
+   "lines": [
+    {
+     "text": "JASON & LUCIA MAP BRIEF PROGRESS",
+     "box": [
+      0.509,
+      0.06,
+      0.911,
+      0.102
+     ]
+    },
+    {
+     "text": "GALLERY",
+     "box": [
+      0.1,
+      0.9,
+      0.2,
+      0.94
+     ]
+    },
+    {
+     "text": "SETTINGS",
+     "box": [
+      0.3,
+      0.905,
+      0.42,
+      0.945
+     ]
+    }
+   ]
   }
  ],
  "carried": {

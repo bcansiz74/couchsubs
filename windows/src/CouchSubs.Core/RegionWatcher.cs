@@ -44,6 +44,10 @@ public sealed record WatchedArea(string Id, string Name, CropRegion Region)
     /// <summary>Otomatik alan ekrandaki bir menüde (<see cref="ScreenTextDetector.InMenu"/>): kısa etiketler de çevrilir.</summary>
     public bool Menu { get; init; }
     /// <summary>
+    /// Menü alanı harita düzeninde (<see cref="ScreenTextDetector.InMapLayout"/>, #1365): haritanın üstüne ikiz kutu çizilmez.
+    /// </summary>
+    public bool Map { get; init; }
+    /// <summary>
     /// Oyuna göre hazır alan (<see cref="GameAreaPresets"/>): yazı ancak düz panel zemininde duruyorsa okunur
     /// (<see cref="UiPanel.HasText"/>). Oyun yanlış seçiliyse ya da bölgede yalnız oyun dünyası varsa hiçbir şey çevrilmez.
     /// </summary>
@@ -398,12 +402,18 @@ public sealed partial class RegionWatcher
     /// sağdaki kesik parçaları ("ctibles, like", "nd") ayrı ayrı çeviriyordu ("Hayır!"); örtü cümlenin yalnız bir kısmını
     /// kapatıyordu. Hazır alana en az bir karo taşan otomatik alan varken hazır alan o turda okunmaz; hazır alanın içinde
     /// kalan (alanının en az <see cref="PresetInsideShare"/>'i) otomatik alan ise okunmaz (hazır alan okuyor, eskisi gibi).
+    /// <para>
+    /// Menü ya da harita düzeni sürerken (menüde otomatik alan varken) hazır alanlar hiç okunmaz (#1365 beta.105): ekranın
+    /// yazıları menü alanlarında okunuyor; hazır yardım/mesaj alanı aynı ekranı yeniden okuyup listenin satırlarını
+    /// haritanın üstünde yüzen ikiz kutulara, kartın üstüne yarım örtülere yazıyordu.
+    /// </para>
     /// </summary>
     internal static IReadOnlyList<WatchedArea> YieldingPresets(IReadOnlyList<WatchedArea> areas)
     {
         static bool IsPreset(WatchedArea a) => a.Id is GameAreaPresets.HelpId or GameAreaPresets.PhoneId;
         var presets = areas.Where(IsPreset).Select(a => a.Region).ToList();
         if (presets.Count == 0) return areas;
+        if (areas.Any(a => a.Auto && a.Menu)) return [.. areas.Where(a => !IsPreset(a))];
         static (double Width, double Height) Overlap(CropRegion a, CropRegion b) =>
             (Math.Max(0, Math.Min(a.Right, b.Right) - Math.Max(a.Left, b.Left)),
              Math.Max(0, Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Top, b.Top)));
@@ -681,7 +691,7 @@ public sealed partial class RegionWatcher
                 {
                     kept = [.. kept.OrderBy(row => row.Item.Box.Top).ThenBy(row => row.Item.Box.Left)];
                     var text = string.Join("\n", kept.Select(row => row.Item.Translation));
-                    server.SendRegion(area.Id, text, candidate.Box, candidate.LineHeight, null, [.. kept.Select(row => row.Item)]);
+                    Send(area, text, candidate.Box, candidate.LineHeight, null, [.. kept.Select(row => row.Item)]);
                     state.ShownText = candidate.Text;
                     state.RenderedText = text;
                     state.RenderedBlocks = kept;
@@ -918,6 +928,14 @@ public sealed partial class RegionWatcher
         var paintBegun = System.Diagnostics.Stopwatch.GetTimestamp();
         var made = MakeCandidate(reading, area.Region, image, SplitsMenuRows(Game?.Invoke()), auto: area.Auto, menu: area.Menu,
                                  styled: true, kind: ScreenTextKinds.Of(area), screen: frame);
+        if (made.Blocks is { } blocks)
+        {
+            IReadOnlyList<Block> steady;
+            lock (rowPaints) steady = SteadyPaints(blocks, [.. BlockTexts(made).Select(row => row.Text)], rowPaints, area.Map);
+            var kept = blocks.Zip(steady).Count(pair => pair.First.Paint?.Mode != pair.Second.Paint?.Mode);
+            made = made with { Blocks = steady };
+            if (kept > 0) Log?.Invoke($"ek alan {area.Name}: {kept} satırın çizim kipi korundu{(area.Map ? " (harita düzeni)" : "")}");
+        }
         Timing.Add(StagePaint, System.Diagnostics.Stopwatch.GetElapsedTime(paintBegun));
         return made;
     }
@@ -996,6 +1014,9 @@ public sealed partial class RegionWatcher
                                             Frame? screen = null)
     {
         styled = (auto || styled) && !phone;
+        // Ekran yazısı (otomatik alan, oyunun hazır yardım/mesaj alanı): simge ve bozuk okuma süzgeçleri menü durumundan
+        // bağımsız (#1365 beta.105: menü düşünce "KM Collect…", "ocdich for the onurn Ape" geçip motora gidiyordu).
+        var screenText = auto || kind is ScreenTextKind.Help or ScreenTextKind.Phone;
         var marked = frame is null || phone ? reading.WithButtonIcons() : reading.WithButtonIcons(frame, monochrome: auto);
         // Menü şeridinin sekmeleri tek satır okunsa da ayrı satırlardır (#859); kutular alana oranlı.
         var aspect = (region.Right - region.Left) * 16 / Math.Max(1e-6, (region.Bottom - region.Top) * 9);
@@ -1009,16 +1030,18 @@ public sealed partial class RegionWatcher
         // Otomatik alanda aynı satırın yan yana okunan parçaları (simgeden, renkli addan bölünen cümle) tek satırdır.
         var lines = (auto && !phone ? JoinedPieces(cleaned, aspect) : cleaned)
             // Menü satırının başındaki görev simgesi ("KM", "KK"; daire içinde harfler) yazı değildir (#1365).
-            .Select(line => auto && menu ? ScreenTranslation.WithoutBadge(line) : line)
+            .Select(line => screenText ? ScreenTranslation.WithoutBadge(line) : line)
             .SelectMany(line => phone ? [line] : ScreenTranslation.MenuPieces(line, aspect, frame))
+            // Bölünmeyen sekme şeridi arayüz sözlüğüyle bölünür ("JASON LUCIA MAP BRIEF PROGRESS", #1375).
+            .SelectMany(line => auto && !phone ? ScreenTranslation.GlossaryPieces(line) : [line])
             .Where(line => ScreenTranslation.IsWords(line.Text))
             .Where(line => !styled || !ScreenTranslation.IsClock(line.Text))
             // Otomatik alanda yayın katmanı (logo, alan adı, "Canlı") ve karenin kenarında kesilmiş tek sözcük atılır.
-            // Güveni düşük okuma, sözlükte karşılığı yoksa atılır ("1 Мар" güven 0,3 ama sözlükte "Map").
             // Menüde alanın kenarında kesilmiş satır da atılır (CutAtAreaEdge).
             .Where(line => !auto || !(ScreenTextNoise.IsOverlay(line.Text) || CutAtEdge(line)
-                                      || (menu && !phone && CutAtAreaEdge(line, region))
-                                      || (line.Confidence < 0.5 && UiCommands.TranslateLabelLoosely(IconText.Plain(line.Text)) is null)))
+                                      || (menu && !phone && CutAtAreaEdge(line, region))))
+            // Ekran yazısında güveni düşük okuma, sözlükte karşılığı yoksa atılır ("1 Мар" güven 0,3 ama sözlükte "Map").
+            .Where(line => !screenText || !(line.Confidence < 0.5 && UiCommands.TranslateLabelLoosely(IconText.Plain(line.Text)) is null))
             // Hazır mesaj alanının sol kenarına değen satır alanın dışından taşan yazının kesik parçasıdır (#1391: harita
             // kartının "ctibles, like", "nd" parçaları tek başına çevriliyordu, "Hayır!"); çevrilmez.
             .Where(line => auto || phone || kind != ScreenTextKind.Phone || !CutAtAreaLeftEdge(line, region))
@@ -1027,7 +1050,7 @@ public sealed partial class RegionWatcher
         // Menüde güveni düşük okunan satır (bozuk okuma: "scarch rol the onuin Ape", "AUD MARNER") çeviri motoruna gitmez;
         // satır bu okumada yok sayılır, gösterilen çevirisi yerinde kalır, temiz okumada çevrilir (#1365).
         List<string> unsure = [];
-        if (auto && menu)
+        if (screenText)
         {
             unsure = [.. lines.Where(ScreenTextNoise.IsUnsure).Select(line => line.Text)];
             lines.RemoveAll(ScreenTextNoise.IsUnsure);
@@ -1622,8 +1645,8 @@ public sealed partial class RegionWatcher
                         Paint = current[block.Group].Paint ?? block.Item.Paint,
                     })).ToList()
                 : null;
-            server.SendRegion(area.Id, state.RenderedText, candidate.Box, candidate.LineHeight, state.RenderedIcons,
-                              moved?.Select(block => block.Item).ToList());
+            Send(area, state.RenderedText, candidate.Box, candidate.LineHeight, state.RenderedIcons,
+                 moved?.Select(block => block.Item).ToList());
             state.RenderedBox = candidate.Box;
             state.RenderedLineHeight = candidate.LineHeight;
             state.RenderedLayout = candidate.Blocks;
@@ -1750,9 +1773,10 @@ public sealed partial class RegionWatcher
         Publish(area, state, started, candidate, result, readyCount, prepared, cached: cached is not null);
     }
 
+    /// <param name="screen">Ekran yazısının çizimi (<see cref="Send"/>: boş kutu çizilmez); telefon gönderisi değil.</param>
     private void SendCurrent(WatchedArea area, State state, int started, string text, TextBox? box,
                              double? lineHeight = null, IReadOnlyList<IconPlacement>? icons = null,
-                             IReadOnlyList<ScreenTranslation.Item>? blocks = null)
+                             IReadOnlyList<ScreenTranslation.Item>? blocks = null, bool screen = false)
     {
         var map = states;
         lock (map)
@@ -1822,8 +1846,125 @@ public sealed partial class RegionWatcher
                 state.SentPhoneShown = blocks;
                 state.SentPhoneOptions = options;
             }
-            server.SendRegion(area.Id, text, box, lineHeight, icons, blocks);
+            if (screen) Send(area, text, box, lineHeight, icons, blocks);
+            else server.SendRegion(area.Id, text, box, lineHeight, icons, blocks);
         }
+    }
+
+    /// <summary>
+    /// Bloklu çeviriyi TV'ye gönderir; boş kutu çizilmez (<see cref="Drawable"/>): bloklardan hiçbiri yazı taşımıyorsa alanın
+    /// kutusu kalkar.
+    /// </summary>
+    private void Send(WatchedArea area, string text, TextBox? box, double? lineHeight, IReadOnlyList<IconPlacement>? icons,
+                      IReadOnlyList<ScreenTranslation.Item>? blocks)
+    {
+        if (blocks is null)
+        {
+            server.SendRegion(area.Id, text, box, lineHeight, icons, null);
+            return;
+        }
+        var shown = Drawable(blocks);
+        if (shown.Count < blocks.Count) Log?.Invoke($"ek alan {area.Name}: {blocks.Count - shown.Count} boş kutu çizilmedi");
+        if (shown.Count == 0)
+        {
+            server.SendRegion(area.Id, "", null);
+            return;
+        }
+        server.SendRegion(area.Id, text, box, lineHeight, icons, shown);
+    }
+
+    /// <summary>
+    /// Yazı taşıyan bloklar (#1365 beta.105: haritada boş koyu kutular): Türkçesinde harf, rakam ya da kumanda simgesi
+    /// olmayan blok (boş çeviri, yalnız görev imi) çizilmez. Mac ve Android aynı.
+    /// </summary>
+    internal static IReadOnlyList<ScreenTranslation.Item> Drawable(IReadOnlyList<ScreenTranslation.Item> items) =>
+        [.. items.Where(item => item.Icons is { Count: > 0 } || IconText.Plain(item.Translation).Any(char.IsLetterOrDigit))];
+
+    /// <summary>Satırın bir kez seçilen çizim kipi ve o andaki ölçüleri (<see cref="SteadyPaints"/>).</summary>
+    internal sealed record RowPaint(string Mode, TextPaint Paint, TextBox Box);
+
+    /// <summary>Satırların bir kez seçilen çizim kipi (<see cref="SteadyPaints"/>); satırın yazısıyla anılır.</summary>
+    private readonly Dictionary<string, RowPaint> rowPaints = [];
+
+    /// <summary>En çok bu kadar satırın kipi hatırlanır; aşılınca yalnız bu okumanın satırları kalır.</summary>
+    internal const int RowPaintLimit = 128;
+    /// <summary>Satır bundan fazla yana kaydıysa (kareye oranla) eski yanına yazma/ikiz ölçüleri taşınmaz, satır örtülür.</summary>
+    internal const double RowPaintShift = 0.02;
+
+    /// <summary>
+    /// Satır başına sabit çizim kipi (#1365 beta.105, #1364'ün satır farkının devamı): kip her okumada boş alana bakılarak
+    /// yeniden seçiliyordu; aynı satır art arda okumalarda örtü, yan ya da ikiz oluyordu (bir oturumda 237 yan, 139 örtü,
+    /// 37 ikiz). Satırın kipi ilk çiziminde seçilir ve yazısı aynı kaldıkça değişmez:
+    /// <list type="bullet">
+    /// <item>Yeni ölçüm aynı kipi verdiyse yeni ölçüler kullanılır (satır kaydıysa yeni yeri).</item>
+    /// <item>Başka kip verdiyse: satır önceden örtülüyorsa yine örtülür (yeni yerinde); yanına yazılıyor ya da ikizdeyse eski
+    /// ölçüler satırın yeni yerine taşınır. Satır yana kaydıysa (<see cref="RowPaintShift"/>) eski ölçüler taşınamaz; satır
+    /// örtülür ve bundan sonra hep örtülür (kip en çok bir kez, örtüye döner).</item>
+    /// <item><paramref name="map"/>: harita düzeninde ikiz kutu çizilmez (haritanın üstünde yüzen kutular); ikiz seçilen blok
+    /// örtülür.</item>
+    /// </list>
+    /// Mac (RegionWatcher.steadyPaints) ve Android (steadyPaints) aynı.
+    /// </summary>
+    internal static IReadOnlyList<Block> SteadyPaints(IReadOnlyList<Block> blocks, IReadOnlyList<string> texts,
+                                                      Dictionary<string, RowPaint> memory, bool map)
+    {
+        var result = blocks.ToList();
+        var seen = new HashSet<string>();
+        for (var i = 0; i < result.Count; i++)
+        {
+            if (result[i].Paint is not { } paint) continue;
+            if (map && paint.Mode == PaintMode.Twin) paint = CoverOnly(paint);
+            var key = i < texts.Count ? TextKey([IconText.Plain(texts[i])]) : "";
+            if (key.Length == 0)
+            {
+                result[i] = result[i] with { Paint = paint };
+                continue;
+            }
+            seen.Add(key);
+            var box = result[i].Box;
+            if (memory.TryGetValue(key, out var kept) && kept.Mode != paint.Mode)
+            {
+                double dx = box.Left - kept.Box.Left, dy = box.Top - kept.Box.Top;
+                paint = kept.Mode == PaintMode.Cover || Math.Abs(dx) > RowPaintShift ? CoverOnly(paint) : Shifted(kept.Paint, dx, dy);
+            }
+            memory[key] = new RowPaint(paint.Mode, paint, box);
+            result[i] = result[i] with { Paint = paint };
+        }
+        if (memory.Count > RowPaintLimit)
+            foreach (var key in memory.Keys.Where(key => !seen.Contains(key)).ToList()) memory.Remove(key);
+        return result;
+    }
+
+    /// <summary>Ölçünün yalnız örtüsü (yanına yazma ve ikiz bilgisi atılır).</summary>
+    internal static TextPaint CoverOnly(TextPaint paint) => paint with
+    {
+        Mode = PaintMode.Cover,
+        Spot = null,
+        SpotRoom = null,
+        Twin = null,
+        Radius = 0,
+        Scale = 1,
+        Tail = null,
+        Portrait = null,
+        PortraitTwin = null,
+        PortraitImage = null,
+        Edge = null,
+    };
+
+    /// <summary>Ölçünün bütün kutuları (<paramref name="dx"/>, <paramref name="dy"/>) kadar kaymış hâli.</summary>
+    internal static TextPaint Shifted(TextPaint paint, double dx, double dy)
+    {
+        TextBox Move(TextBox box) => new(box.Left + dx, box.Top + dy, box.Right + dx, box.Bottom + dy);
+        return paint with
+        {
+            Cover = Move(paint.Cover),
+            Grow = paint.Grow is { } grow ? Move(grow) : null,
+            Spot = paint.Spot is { } spot ? Move(spot) : null,
+            SpotRoom = paint.SpotRoom is { } room ? Move(room) : null,
+            Twin = paint.Twin is { } twin ? Move(twin) : null,
+            Portrait = paint.Portrait is { } portrait ? Move(portrait) : null,
+            PortraitTwin = paint.PortraitTwin is { } portraitTwin ? Move(portraitTwin) : null,
+        };
     }
 
     /// <summary>
@@ -1936,7 +2077,7 @@ public sealed partial class RegionWatcher
             icons = []; // Her görünür bloğun kendi simgeleri ve konumları Item içinde taşınır.
         }
         SendCurrent(area, state, started, shown, box, candidate.LineHeight, icons.Count > 0 ? icons : null,
-                          blocks?.Select(block => block.Item).ToList());
+                    blocks?.Select(block => block.Item).ToList(), screen: true);
         state.RenderedKey = candidate.Key;
         state.RenderedText = shown;
         state.RenderedIcons = icons.Count > 0 ? icons : null;
@@ -2218,6 +2359,7 @@ public sealed partial class RegionWatcher
             worldText.Clear();
             autoSeen.Clear();
         }
+        lock (rowPaints) rowPaints.Clear();
         if (anyShown) server.ClearRegions();
     }
 }

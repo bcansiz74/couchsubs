@@ -552,6 +552,54 @@ public enum ScreenTranslation {
         }
     }
 
+    /// Bölünmeyen sekme şeridi (#1375, beta.105: "JASON LUCIA HARİTASI ÖZETİLERLEME"): görüntüdeki boşluk sekmeleri
+    /// ayırmadığında (sekmeler sık, seçili sekme renkli) BÜYÜK HARFLİ satır arayüz sözlüğüne göre bölünür. Satır baştan
+    /// sona sözlükteki etiketlerden (en uzun eşleşme önce: "SET DESTINATION", "ADD MARKER" tek etikettir), "AD & AD" ya da
+    /// karakter adı çiftinden ("JASON LUCIA") oluşmalı; en az üç parça ya da bir ad çifti olmalı (iki sözlük sözcüklü
+    /// gerçek etiket bölünmez). Her parçanın kutusu sözcük kutularından (yoksa harf sayısından kestirilir). Simgeli satıra
+    /// dokunulmaz. Windows ve Android aynı.
+    public static func glossaryPieces(_ line: TextLine) -> [TextLine] {
+        guard let box = line.box, !line.text.contains(ButtonIcons.marker), (line.icons ?? []).isEmpty,
+              TextStyleSampler.isUpper(line.text) else { return [line] }
+        let words = line.text.split(separator: " ").map(String.init)
+        guard words.count >= 2 else { return [line] }
+        var segments: [Range<Int>] = []
+        var names = false
+        var i = 0
+        while i < words.count {
+            if i + 2 < words.count, words[i + 1] == "&", words[i].contains(where: \.isLetter), words[i + 2].contains(where: \.isLetter) {
+                segments.append(i..<(i + 3))
+                names = true
+                i += 3
+                continue
+            }
+            if i + 1 < words.count, isNamePair(words[i] + " " + words[i + 1]) {
+                segments.append(i..<(i + 2))
+                names = true
+                i += 2
+                continue
+            }
+            guard let end = stride(from: min(words.count, i + glossaryReach), to: i, by: -1).first(where: { end in
+                UiCommands.translateLabel(words[i..<end].joined(separator: " ")) != nil
+            }) else { return [line] }
+            segments.append(i..<end)
+            i = end
+        }
+        guard segments.count >= 3 || (names && segments.count >= 2) else { return [line] }
+        let measured = (line.words ?? []).count == words.count
+        let spans = measured ? line.words! : ButtonIcons.estimate(line.text, box)
+        guard spans.count == words.count else { return [line] }
+        return segments.map { range in
+            let span = spans[range].dropFirst().reduce(spans[range.lowerBound].box) { $0.union($1.box) }
+            return TextLine(words[range].joined(separator: " "),
+                            box: TextBox(left: span.left, top: box.top, right: span.right, bottom: box.bottom),
+                            confidence: line.confidence, words: measured ? Array(spans[range]) : nil)
+        }
+    }
+
+    /// Sözlük etiketinin en çok sözcük sayısı (`glossaryPieces`).
+    static let glossaryReach = 3
+
     /// Satırın yazı boyu: sözcük kutularının ortanca yüksekliği (satır kutusundan büyük değil). Satıra katılan simge
     /// harflerden uzundur; satır kutusunu, onunla sekme boşluğu eşiğini de büyütüyordu (#1372). Windows ve Android aynı.
     static func textHeight(_ line: TextLine) -> Double {
@@ -730,10 +778,13 @@ public enum ScreenTranslation {
     /// kimyasalları topluyor") ve kutu simgenin üstünü örtüyordu. Baştaki bir-iki BÜYÜK harflik sözcük, ardında büyük harfle
     /// başlayan ve küçük harf taşıyan (BÜYÜK HARFLİ olmayan) en az iki sözcük varsa simgedir: atılır, kutu ikinci sözcükten
     /// başlar. Gerçek kısa sözcükler (`badgeWords`: "A", "I", "OK", "TV", "DJ"…) dokunulmaz. Windows ve Android aynı.
+    /// Büyük-küçük karışık okunan simge de ("Kh", "Kk"; beta.105) simgedir: ilk harfi büyük, ikincisi küçük, gerçek iki
+    /// harfli sözcük değil ("Go", "No", "Do" `badgeWords`'te).
     public static func withoutBadge(_ line: TextLine) -> TextLine {
         let tokens = line.text.split(separator: " ").map(String.init)
         guard tokens.count >= 3, let head = tokens.first, (1...2).contains(head.count),
-              head.allSatisfy({ $0.isLetter && $0.isUppercase }), !badgeWords.contains(head) else { return line }
+              head.allSatisfy(\.isLetter), head.first!.isUppercase,
+              !badgeWords.contains(head.uppercased(with: Locale(identifier: "en_US_POSIX"))) else { return line }
         let rest = Array(tokens.dropFirst())
         guard rest[0].first?.isUppercase == true, rest.joined().contains(where: \.isLowercase) else { return line }
         var trimmed = line
@@ -749,7 +800,9 @@ public enum ScreenTranslation {
 
     /// Satır başında simge sanılmayacak kısa BÜYÜK harfli sözcükler.
     static let badgeWords: Set<String> = ["A", "I", "O", "OK", "TV", "DJ", "UK", "US", "UN", "LA", "NY", "MR", "DR", "MS",
-                                          "ST", "PS", "AI", "HQ", "ID", "EU", "OF", "IN", "ON", "TO", "MY", "NO", "GO", "UP"]
+                                          "ST", "PS", "AI", "HQ", "ID", "EU", "OF", "IN", "ON", "TO", "MY", "NO", "GO", "UP",
+                                          "AM", "AN", "AS", "AT", "BE", "BY", "DO", "HE", "HI", "IF", "IS", "IT", "ME", "OH",
+                                          "OR", "SO", "WE", "YO", "OI", "AH", "HA", "EH", "UH", "UM", "OX", "JR", "SR", "VS"]
 
     /// Satırın başındaki ya da sonundaki kumanda simgesi (kareden tanınmış simge ya da okunmuş tuş adı: "RECENTER L3",
     /// "EXIT (○)") çeviriye girmez; kutu yalnız yazının sözcüklerini kapsar, simge ekranda görünür kalır. Önceden çeviri

@@ -285,7 +285,7 @@
    ]
   },
   {
-   "name": "menü alanı hazır alana değiyor: mesaj alanı okunmaz",
+   "name": "menü alanı varken hazır alanlar okunmaz (#1365 beta.105: haritada yüzen ikiz kutular)",
    "region": [
     0.8,
     0.7,
@@ -294,7 +294,6 @@
    ],
    "menu": true,
    "kept": [
-    "preset-help",
     "auto-1"
    ]
   }

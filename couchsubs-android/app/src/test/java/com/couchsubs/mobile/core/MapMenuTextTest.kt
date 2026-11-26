@@ -66,7 +66,10 @@ class MapMenuTextTest {
         assertFalse(joined, joined.contains("scarch"))
         assertFalse(joined, joined.contains("KM"))
         assertTrue(joined, joined.contains("Collect Chemicals for Kyle"))
+        // #1365 beta.105: süzgeçler menü dışında da (ekran yazısı) uygulanır.
         val outside = RegionWatcher.candidate(reading, region, auto = true, menu = false)
-        assertTrue(outside.unsure.isEmpty())
+        assertEquals(listOf("scarch rol the onuin Ape"), outside.unsure)
+        val outsideJoined = outside.paragraphs.joinToString(" ")
+        assertFalse(outsideJoined, outsideJoined.contains("KM"))
     }
 }

@@ -13,14 +13,14 @@ namespace CouchSubs.Core.Tests;
 /// </summary>
 public class MapLayoutTests
 {
-    private sealed record Text(string Role, int Column, int Row, int Width, string Kind);
-    private sealed record Box(int[] Cells, int Fill);
-    private sealed record Panel(string Side, int Columns, int Fill);
+    internal sealed record Text(string Role, int Column, int Row, int Width, string Kind);
+    internal sealed record Box(int[] Cells, int Fill);
+    internal sealed record Panel(string Side, int Columns, int Fill);
 
-    private sealed record Scene(string Name, int Map, bool Texture, bool Moving, bool Mirror, Panel? Panel, List<Box> Boxes,
+    internal sealed record Scene(string Name, int Map, bool Texture, bool Moving, bool Mirror, Panel? Panel, List<Box> Boxes,
                                 List<Text> Texts, int UntilMs, JsonElement Expect);
 
-    private const int Width = 640, Height = 360, Tile = 20;
+    internal const int Width = 640, Height = 360, Tile = 20;
 
     private static List<Scene> Load()
     {
@@ -57,7 +57,7 @@ public class MapLayoutTests
     }
 
     /// <summary>Sahnenin <paramref name="phase"/> anındaki karesi (gri tonlu).</summary>
-    private static Frame Pixels(Scene scene, int phase)
+    internal static Frame Pixels(Scene scene, int phase)
     {
         var gray = new byte[Width * Height];
         Array.Fill(gray, (byte)scene.Map);
@@ -112,7 +112,7 @@ public class MapLayoutTests
     private static (double X, double Y) Center(Text text) =>
         ((text.Column + text.Width / 2.0) / 32, (text.Row + 0.5) / 18);
 
-    private static WatchedArea? Holder(IReadOnlyList<WatchedArea> areas, Text text)
+    internal static WatchedArea? Holder(IReadOnlyList<WatchedArea> areas, Text text)
     {
         var c = Center(text);
         return areas.FirstOrDefault(a => c.X >= a.Region.Left && c.X <= a.Region.Right && c.Y >= a.Region.Top && c.Y <= a.Region.Bottom);

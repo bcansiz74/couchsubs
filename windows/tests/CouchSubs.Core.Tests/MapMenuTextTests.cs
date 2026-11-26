@@ -78,7 +78,9 @@ public class MapMenuTextTests
         Assert.DoesNotContain("scarch", joined);
         Assert.DoesNotContain("KM", joined);
         Assert.Contains("Collect Chemicals for Kyle", joined);
+        // #1365 beta.105: menü düşünce de süzülür (harita düzeni bir kare düşünce "KM Collect…", "ocdich…" geçiyordu).
         var outside = RegionWatcher.MakeCandidate(reading, region, auto: true, menu: false);
-        Assert.Empty(outside.Unsure);
+        Assert.Equal(["scarch rol the onuin Ape"], outside.Unsure);
+        Assert.DoesNotContain("KM", string.Join(' ', outside.Paragraphs));
     }
 }

@@ -16,6 +16,11 @@
     { "text": "LAUNCH ROCKETS ￼ EXIT", "expected": null }
   ],
   "translateLabel": [
+    { "text": "Stick Ups", "expected": "Silahlı Soygunlar" },
+    { "text": "ROBBERIES", "expected": "SOYGUNLAR" },
+    { "text": "TARGETS", "expected": "HEDEFLER" },
+    { "text": "Kingfishers", "expected": "Kingfishers" },
+    { "text": "EXPLORATION", "expected": "KEŞİF" },
     { "text": "OFF", "expected": "KAPALI" },
     { "text": "Off", "expected": "Kapalı" },
     { "text": "off", "expected": "kapalı" },

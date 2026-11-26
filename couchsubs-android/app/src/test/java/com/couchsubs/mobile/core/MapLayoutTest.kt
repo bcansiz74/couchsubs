@@ -15,10 +15,10 @@ import org.junit.Test
  * MapLayoutTests.swift ve Windows MapLayoutTests.cs aynı dosyayı okur).
  */
 class MapLayoutTest {
-    private data class Text(val role: String, val column: Int, val row: Int, val width: Int, val kind: String)
-    private data class Box(val cells: List<Int>, val fill: Int)
-    private data class Panel(val side: String, val columns: Int, val fill: Int)
-    private data class Scene(
+    internal data class Text(val role: String, val column: Int, val row: Int, val width: Int, val kind: String)
+    internal data class Box(val cells: List<Int>, val fill: Int)
+    internal data class Panel(val side: String, val columns: Int, val fill: Int)
+    internal data class Scene(
         val name: String, val map: Int, val texture: Boolean, val moving: Boolean, val mirror: Boolean, val panel: Panel?,
         val boxes: List<Box>, val texts: List<Text>, val untilMs: Int, val expect: JSONObject,
     )
@@ -54,53 +54,6 @@ class MapLayoutTest {
             boxes = scene.boxes.map { b -> b.copy(cells = listOf(31 - b.cells[2], b.cells[1], 31 - b.cells[0], b.cells[3])) },
             panel = scene.panel?.let { it.copy(side = if (it.side == "left") "right" else "left") },
         )
-    }
-
-    /** Sahnenin [phase] anındaki karesi (gri ton). */
-    private fun pixels(scene: Scene, phase: Int): IntArray {
-        val gray = IntArray(WIDTH * HEIGHT) { scene.map }
-        fun set(x: Int, y: Int, v: Int) { gray[y * WIDTH + x] = v }
-        val panelColumns: Set<Int> = scene.panel?.let { panel ->
-            if (panel.side == "left") (0 until panel.columns).toSet() else ((32 - panel.columns) until 32).toSet()
-        } ?: emptySet()
-        for (row in 0 until 18) for (column in 0 until 32) {
-            val x0 = column * TILE
-            val y0 = row * TILE
-            if (column in panelColumns) {
-                for (y in y0 until y0 + TILE) for (x in x0 until x0 + TILE) set(x, y, scene.panel!!.fill)
-            } else if (scene.texture && (column + row) % 3 != 0) {
-                val shift = if (scene.moving) phase % 3 else 0
-                for (y in y0 until y0 + TILE) for (x in x0 until x0 + TILE) set(x, y, if ((y + shift) % 3 == 0) 200 else 120)
-            }
-        }
-        for (box in scene.boxes) {
-            for (y in box.cells[1] * TILE until (box.cells[3] + 1) * TILE) {
-                for (x in box.cells[0] * TILE until (box.cells[2] + 1) * TILE) set(x, y, box.fill)
-            }
-        }
-        for (text in scene.texts) {
-            val y0 = text.row * TILE
-            for (y in y0 + 3 until y0 + 17) {
-                val r = (y - y0) % 6
-                for (x in text.column * TILE until (text.column + text.width) * TILE) {
-                    val stroke = x % 5 < 2
-                    if (text.kind == "dark") {
-                        set(x, y, if ((r == 2 || r == 3) && stroke) 240 else 24)
-                    } else if ((r == 2 || r == 3) && stroke) {
-                        set(x, y, 240)
-                    } else if ((r == 1 || r == 4) && stroke) {
-                        set(x, y, 40)
-                    }
-                }
-            }
-        }
-        return gray
-    }
-
-    private fun holder(areas: List<ExtraArea>, text: Text): ExtraArea? {
-        val cx = (text.column + text.width / 2.0) / 32
-        val cy = (text.row + 0.5) / 18
-        return areas.firstOrNull { cx >= it.region.left && cx <= it.region.right && cy >= it.region.top && cy <= it.region.bottom }
     }
 
     @Test
@@ -163,9 +116,57 @@ class MapLayoutTest {
         assertEquals(false, panel({ column, _ -> if (column >= 23) 45.0 else 160.0 }, right)?.left)
     }
 
-    private companion object {
+    /** Sahne çizimi; MapFlickerTest de kullanır (ortak çizici). */
+    internal companion object {
         const val WIDTH = 640
         const val HEIGHT = 360
         const val TILE = 20
+
+        /** Sahnenin [phase] anındaki karesi (gri ton). */
+        fun pixels(scene: Scene, phase: Int): IntArray {
+            val gray = IntArray(WIDTH * HEIGHT) { scene.map }
+            fun set(x: Int, y: Int, v: Int) { gray[y * WIDTH + x] = v }
+            val panelColumns: Set<Int> = scene.panel?.let { panel ->
+                if (panel.side == "left") (0 until panel.columns).toSet() else ((32 - panel.columns) until 32).toSet()
+            } ?: emptySet()
+            for (row in 0 until 18) for (column in 0 until 32) {
+                val x0 = column * TILE
+                val y0 = row * TILE
+                if (column in panelColumns) {
+                    for (y in y0 until y0 + TILE) for (x in x0 until x0 + TILE) set(x, y, scene.panel!!.fill)
+                } else if (scene.texture && (column + row) % 3 != 0) {
+                    val shift = if (scene.moving) phase % 3 else 0
+                    for (y in y0 until y0 + TILE) for (x in x0 until x0 + TILE) set(x, y, if ((y + shift) % 3 == 0) 200 else 120)
+                }
+            }
+            for (box in scene.boxes) {
+                for (y in box.cells[1] * TILE until (box.cells[3] + 1) * TILE) {
+                    for (x in box.cells[0] * TILE until (box.cells[2] + 1) * TILE) set(x, y, box.fill)
+                }
+            }
+            for (text in scene.texts) {
+                val y0 = text.row * TILE
+                for (y in y0 + 3 until y0 + 17) {
+                    val r = (y - y0) % 6
+                    for (x in text.column * TILE until (text.column + text.width) * TILE) {
+                        val stroke = x % 5 < 2
+                        if (text.kind == "dark") {
+                            set(x, y, if ((r == 2 || r == 3) && stroke) 240 else 24)
+                        } else if ((r == 2 || r == 3) && stroke) {
+                            set(x, y, 240)
+                        } else if ((r == 1 || r == 4) && stroke) {
+                            set(x, y, 40)
+                        }
+                    }
+                }
+            }
+            return gray
+        }
+
+        fun holder(areas: List<ExtraArea>, text: Text): ExtraArea? {
+            val cx = (text.column + text.width / 2.0) / 32
+            val cy = (text.row + 0.5) / 18
+            return areas.firstOrNull { cx >= it.region.left && cx <= it.region.right && cy >= it.region.top && cy <= it.region.bottom }
+        }
     }
 }

@@ -60,7 +60,9 @@ final class MapMenuTextTests: XCTestCase {
         XCTAssertFalse(menu.paragraphs.joined(separator: " ").contains("scarch"))
         XCTAssertFalse(menu.paragraphs.joined(separator: " ").contains("KM"))
         XCTAssertTrue(menu.paragraphs.joined(separator: " ").contains("Collect Chemicals for Kyle"))
+        // #1365 beta.105: menü düşünce de süzülür (harita düzeni bir kare düşünce "KM Collect…", "ocdich…" geçiyordu).
         let outside = RegionWatcher.candidate(reading, in: region, auto: true, menu: false)
-        XCTAssertTrue(outside.unsure.isEmpty)
+        XCTAssertEqual(outside.unsure, ["scarch rol the onuin Ape"])
+        XCTAssertFalse(outside.paragraphs.joined(separator: " ").contains("KM"))
     }
 }

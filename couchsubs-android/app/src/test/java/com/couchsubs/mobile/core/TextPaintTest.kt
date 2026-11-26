@@ -438,6 +438,9 @@ class TextPaintTest {
         menu = menu.copy(menu = true)
         assertEquals(listOf("auto-1"), RegionWatcher.yieldingPresets(listOf(phone, menu)).map { it.id })
         menu = menu.copy(region = CropRegion(top = 0.05, bottom = 0.12, left = 0.4, right = 0.9))
+        // #1365 beta.105: menü sürerken hazır alan kesişmese de okunmaz (aynı ekranı yeniden okuyup ikiz kutu çiziyordu).
+        assertEquals("menüde hazır alan okunmaz", listOf("auto-1"), RegionWatcher.yieldingPresets(listOf(phone, menu)).map { it.id })
+        menu = menu.copy(menu = false)
         assertEquals("kesişmeyen hazır alan kalır", listOf(phone.id, "auto-1"), RegionWatcher.yieldingPresets(listOf(phone, menu)).map { it.id })
     }
 }

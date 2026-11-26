@@ -143,8 +143,10 @@ public sealed class ScreenTextDetector
     public Action<string>? OnLog { get; set; }
     private List<string> notes = [];
     private string? mapPanelSeen;
+    /// <summary>Tanınmış harita düzeni; tek karelik ıskada düşmez (<see cref="MapHold"/>).</summary>
+    private MapHold mapHold;
 
-    /// <summary>Son örnekte harita düzeni (#1365) tanındı.</summary>
+    /// <summary>Son örnekte harita düzeni (#1365) tanındı ya da tanınmış düzen sürüyor (<see cref="MapHold"/>).</summary>
     public bool InMapLayout
     {
         get { lock (gate) return mapPanelSeen is not null; }
@@ -296,6 +298,7 @@ public sealed class ScreenTextDetector
             // Menünün geçmiş listesi az önce okundu: konuşan adlı satır listenin satırıdır (kaydırırken tek satır okunabilir).
             if (listAt is { } listed && now - listed <= ListMs) return;
             dialogueAt = now;
+            mapHold = default;
             if (!menu) return;
             menu = false;
             menuFloor = now;
@@ -339,6 +342,7 @@ public sealed class ScreenTextDetector
             dialogueAt = null;
             listAt = null;
             mapPanelSeen = null;
+            mapHold = default;
             notes = [];
         }
     }
@@ -591,6 +595,7 @@ public sealed class ScreenTextDetector
         // Konuşma satırı az önce okundu: menü yok (#1240).
         if (dialogueAt is { } spoken && now - spoken <= DialogueMs)
         {
+            mapHold = default;
             NotePanel(null, 0);
             return false;
         }
@@ -601,16 +606,26 @@ public sealed class ScreenTextDetector
         var quietShare = outside.Count == 0 ? 0 : (double)outside.Count(index => tiles[index].Quiet) / outside.Count;
         // Harita düzeni (#1365): keskin harita sakin zemin ve üç bileşen şartını karşılamıyor; düzen tanınınca eşikler
         // gevşer. Düzen yoksa eşikler eskisi gibi.
-        var panel = components.Count >= MapComponents && quietShare >= MapQuietShare
-            ? MapPanel(index => candidate[index] || inside.Contains(index), now) : null;
+        Func<int, bool> text = index => candidate[index] || inside.Contains(index);
+        var found = components.Count >= MapComponents && quietShare >= MapQuietShare ? MapPanel(text, now) : null;
+        // Tanınmış düzen (beta.105, #1365): seçim değişince oyun haritayı kaydırıp karartıyor, harita karoları yerinde
+        // durmadığı için tanıma 0,15-5 sn'de bir düşüyordu; düşünce liste menü dışı alanlara bölünüp hazır alanlar aynı
+        // ekranı yeniden okuyordu (haritada yüzen ikiz kutular). Panel yerinde durdukça düzen sürer (MapHold).
+        var held = mapHold.Panel is { } kept && PanelHolds(kept, text, index => tiles[index].Mean);
+        var changed = tiles.Count(tile => tile.StableSince == now) >= MapSceneChange * tiles.Length;
+        var panel = mapHold.Next(found, held, changed);
         NotePanel(panel, quietShare);
-        if (components.Count < (panel is null ? MenuComponents : MapComponents)
-            || quietShare < (panel is null ? MenuQuietShare : MapQuietShare)) return false;
+        // Harita düzeni yerinde: menü sürer (MenuLifeMs dolmaz, bileşen ve sakin zemin şartı aranmaz); oyuncu haritaya
+        // hareketsiz baksa da, harita kayıp kararsa da liste, görev kartı ve tuş çubuğu menü alanı kalır (#1365).
+        if (panel is not null)
+        {
+            if (!menu) menuEnteredAt = now;
+            if (components.Count > 0) menuAnchors = components.SelectMany(item => item.Tiles).ToHashSet();
+            return true;
+        }
+        if (components.Count < MenuComponents || quietShare < MenuQuietShare) return false;
         if (menu && components.Any(item => item.Tiles.Count(menuAnchors.Contains) >= KeepOverlap * item.Tiles.Count))
         {
-            // Harita düzeni yerinde: oyuncu haritaya hareketsiz baksa da menü sürer (MenuLifeMs dolmaz); süresi dolunca
-            // liste, görev kartı ve tuş çubuğu menü dışı alanlara bölünüyordu (#1365).
-            if (panel is not null) return true;
             // Menüde bir şey değişmeden (gezinme, seçim) MenuLifeMs geçti: menü sayılmaz, altyazı yeniden gösterilir. Aynı
             // yazılar yeniden menü sayılmaz; menü ancak sonradan beliren yazılarla yeniden açılır (menuFloor).
             var activity = menuAnchors.Count == 0 ? menuEnteredAt : menuAnchors.Max(index => tiles[index].StableSince);
@@ -723,6 +738,91 @@ public sealed class ScreenTextDetector
         return null;
     }
 
+    /// <summary>Tanınmış düzenin paneli art arda bu kadar örnekte (100 ms'de bir) yerinde bulunamazsa düzen biter.</summary>
+    public const int MapMissSamples = 5;
+    /// <summary>Karoların en az bu kadarı bir örnekte değiştiyse ve panel yerinde değilse ekran değişmiştir: düzen hemen biter.</summary>
+    public const double MapSceneChange = 0.6;
+
+    /// <summary>
+    /// Tanınmış harita düzeninin sürmesi (beta.105, #1365 ve #1391): düzen bir kez tanınınca panel yerinde durdukça
+    /// (<see cref="PanelHolds"/>: tam boy koyu panel ve içinde liste) sürer; haritanın kayması, kararması, yakınlaşması
+    /// düzeni düşürmez. Panel art arda <see cref="MapMissSamples"/> örnekte bulunamazsa ya da ekran bütünüyle değişirse
+    /// (<see cref="MapSceneChange"/>) düzen biter. Aynı yanda bir karo oynayan genişlik düzeni değiştirmez (bölge kırpması
+    /// oynamasın). Mac/iPhone (ScreenTextDetector.MapHold) ve Android (ScreenTextDetector.MapHold) aynı.
+    /// </summary>
+    internal struct MapHold
+    {
+        public (bool Left, int Width)? Panel;
+        public int Misses;
+
+        public (bool Left, int Width)? Next((bool Left, int Width)? found, bool holds, bool sceneChanged)
+        {
+            if (found is { } seen)
+            {
+                Misses = 0;
+                if (Panel is { } previous && previous.Left == seen.Left && Math.Abs(previous.Width - seen.Width) <= 1) return previous;
+                Panel = seen;
+                return seen;
+            }
+            if (Panel is not { } kept) return null;
+            if (holds)
+            {
+                Misses = 0;
+                return kept;
+            }
+            Misses++;
+            if (sceneChanged || Misses >= MapMissSamples)
+            {
+                Panel = null;
+                Misses = 0;
+                return null;
+            }
+            return kept;
+        }
+    }
+
+    /// <summary>
+    /// Tanınmış panel hâlâ yerinde mi: panelin karo satırlarının en az <see cref="MapRows"/>'u panel (koyu ya da yazı),
+    /// zemininin %85'i koyu ve dış yarısında en az üç satır yazı (liste). Haritaya bakılmaz (kayıp kararabilir).
+    /// </summary>
+    internal static bool PanelHolds((bool Left, int Width) panel, Func<int, bool> inside, Func<int, double> mean)
+    {
+        int Column(int k) => panel.Left ? k : Columns - 1 - k;
+        int ground = 0, darkGround = 0, panelRows = 0, list = 0;
+        for (var row = 0; row < Rows; row++)
+        {
+            var own = 0;
+            for (var k = 0; k < panel.Width; k++)
+            {
+                var index = row * Columns + Column(k);
+                if (inside(index)) { own++; continue; }
+                ground++;
+                if (mean(index) < MapPanelDark) { own++; darkGround++; }
+            }
+            if (own >= 0.6 * panel.Width) panelRows++;
+            for (var k = 0; k < Math.Max(1, panel.Width / 2); k++)
+                if (inside(row * Columns + Column(k))) { list++; break; }
+        }
+        return panelRows >= MapRows * Rows && ground > 0 && darkGround >= 0.85 * ground && list >= 3;
+    }
+
+    /// <summary>
+    /// Harita düzeninde panelin içindeki (karolarının en az yarısı panelde) alanın bölgesi panelin kenarında biter: bölge
+    /// yazının karolarından bir karo geniş olduğu için okuma haritaya taşıyor, haritanın yer adları ("Lake Leonida",
+    /// "Draper Islan") listeye ve karta karışıyordu (#1365). Panelin dışındaki alana (görev kartı, tuş çubuğu) dokunulmaz.
+    /// </summary>
+    internal static CropRegion Clipped(CropRegion region, IReadOnlyList<int> tiles, (bool Left, int Width) panel)
+    {
+        var own = tiles.Count(tile =>
+        {
+            var column = tile % Columns;
+            return panel.Left ? column < panel.Width : column >= Columns - panel.Width;
+        });
+        if (tiles.Count == 0 || own < 0.5 * tiles.Count) return region;
+        var edge = (double)panel.Width / Columns;
+        return panel.Left ? region with { Right = Math.Min(region.Right, edge) } : region with { Left = Math.Max(region.Left, 1 - edge) };
+    }
+
     /// <summary>Harita düzeninin bulunuşu ve bitişi günlüğe bir kez yazılır (<see cref="OnLog"/>; #1365 tanısı).</summary>
     private void NotePanel((bool Left, int Width)? panel, double quietShare)
     {
@@ -802,8 +902,16 @@ public sealed class ScreenTextDetector
         tracked.RemoveAll(item => now - item.Seen >= ExpireMs);
     }
 
-    private List<WatchedArea> Current() =>
-        [.. tracked.Select(item => new WatchedArea(item.Id, AreaName, Region(item.Cells)) { Auto = true, Menu = item.Menu })];
+    private List<WatchedArea> Current()
+    {
+        var panel = mapHold.Panel;
+        return [.. tracked.Select(item =>
+        {
+            var region = Region(item.Cells);
+            if (item.Menu && panel is { } open) region = Clipped(region, item.Tiles, open);
+            return new WatchedArea(item.Id, AreaName, region) { Auto = true, Menu = item.Menu, Map = item.Menu && panel is not null };
+        })];
+    }
 
     /// <summary>
     /// Karo dikdörtgeni dikeyde yarım, yatayda bir karo genişletilmiş, 0..1'e kırpılmış bölge (yarım karo sözcüğün başını

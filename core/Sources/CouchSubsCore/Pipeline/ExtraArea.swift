@@ -44,6 +44,8 @@ public struct ExtraArea: Codable, Equatable, Identifiable, Sendable {
     public var auto = false
     /// Otomatik alan ekrandaki bir menüde (`ScreenTextDetector.inMenu`): kısa etiketler de çevrilir.
     public var menu = false
+    /// Menü alanı harita düzeninde (`ScreenTextDetector.inMapLayout`, #1365): haritanın üstüne ikiz kutu çizilmez.
+    public var map = false
 
     public init(id: String = UUID().uuidString, name: String, region: CropRegion, enabled: Bool = true, target: ResultTarget = .tv,
                 auto: Bool = false) {
