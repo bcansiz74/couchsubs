@@ -60,7 +60,7 @@ class PhoneTraceTest {
         var found = true
         val image = TestPhoneImage.phone()
         val tracker = GamePhoneTracker { if (found) GamePhoneGeometry.Pose(0.45, top, 0.45, top + 0.68) else null }
-        tracker.onLog = { log.add(it) }
+        tracker.onLog = { if (!it.contains("telefon arama durumu")) log.add(it) } // 30 sn durum satırı ayrı (PhoneSearchStatusTest)
         var time = 0L
         fun sample() { time += 400; tracker.sample(image, time) }
 

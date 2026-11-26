@@ -61,6 +61,34 @@ class CopiedPhoneImage(override val width: Int, override val height: Int, privat
 }
 
 object PhoneFrames {
+    /**
+     * Canlı karenin biçimi, telefon aramasının durum satırı için ([com.couchsubs.mobile.core.PhoneSearchStatus]): çözücünün
+     * renk biçimi, renk düzlemi, ham Y'nin (çözücünün verdiği, [phoneTone]'dan önce) %2, ortanca ve %98 değeri. Telefon
+     * kuralları karenin sınırlı aralıklı (Y 16–235) olduğunu varsayar; yerel çözücü tam aralıklı akışı çevirir
+     * (video-decoder.c limit_range). Ham Y belirgin biçimde 16'nın altına ya da 235'in üstüne çıkıyorsa kare tam aralıklı
+     * gelmiş, çevrilmemiştir: parlaklık kayar, telefon araması eşiklerini kaçırabilir.
+     */
+    fun describe(frame: VideoFrame): String {
+        val values = IntArray(SAMPLE_COLUMNS * SAMPLE_ROWS)
+        if (frame.width > 0 && frame.height > 0) {
+            for (y in 0 until SAMPLE_ROWS) for (x in 0 until SAMPLE_COLUMNS) {
+                val px = ((x + 0.5) * frame.width / SAMPLE_COLUMNS).toInt().coerceIn(0, frame.width - 1)
+                val py = ((y + 0.5) * frame.height / SAMPLE_ROWS).toInt().coerceIn(0, frame.height - 1)
+                values[y * SAMPLE_COLUMNS + x] = frame.buffer.get(py * frame.rowStride + px).toInt() and 0xff
+            }
+        }
+        values.sort()
+        val low = values[values.size * 2 / 100]
+        val mid = values[(values.size - 1) / 2]
+        val high = values[values.size * 98 / 100]
+        val range = if (low < 12 || high > 240) "sınırlı aralık dışı değer var, kare tam aralıklı olabilir" else "sınırlı aralıkta"
+        return "çözücü biçimi 0x${Integer.toHexString(frame.colorFormat)}, renk ${if (frame.chroma != null) "var" else "yok"}, " +
+            "ham Y %2 $low, ortanca $mid, %98 $high ($range)"
+    }
+
+    private const val SAMPLE_COLUMNS = 64
+    private const val SAMPLE_ROWS = 36
+
     /** Kopyalanan parçanın, okunacak alanın çevresindeki payı (piksel): kırpma çift piksele yuvarlanır, okuma 2 piksel taşar. */
     private const val MARGIN = 6
 

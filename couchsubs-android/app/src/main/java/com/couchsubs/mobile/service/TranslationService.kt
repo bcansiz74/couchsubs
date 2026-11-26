@@ -554,7 +554,10 @@ class TranslationService : Service() {
         var seenBounds: CropRegion? = null
         val capture = try {
             val started = System.nanoTime()
-            val sample = phoneTracker.sample(com.couchsubs.mobile.ocr.LivePhoneImage(frame), com.couchsubs.mobile.core.monotonicClock())
+            // 30 sn'de bir arama durumu satırı (telefon bulunamasa da): ıska ölçütü, parlaklık, çözücü biçimi ve ham Y aralığı.
+            val sample = phoneTracker.sample(com.couchsubs.mobile.ocr.LivePhoneImage(frame), com.couchsubs.mobile.core.monotonicClock()) {
+                com.couchsubs.mobile.ocr.PhoneFrames.describe(frame)
+            }
             if (sample.sampled) watcher.timing.add(com.couchsubs.mobile.core.RegionWatcher.STAGE_TRACK, System.nanoTime() - started)
             if (!sample.sampled) {
                 // Ayar kapatıldıysa açık telefon oturumu sonraki örneği beklemeden kapanır.

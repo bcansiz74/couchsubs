@@ -188,3 +188,90 @@ class PhoneRowsLog {
         const val MAX_LENGTH = 400
     }
 }
+
+/**
+ * Telefon aramasının durumu, GTA 6 oynanırken [WINDOW_MS]'de bir tek satır (beta-105, X: "telefon komple çalışmıyor";
+ * #1385'in beta-104 günlüğünde telefon hiç bulunamayınca tek satır yoktu: [PhoneMissLog] yalnız telefona benzer bir şey
+ * görüldüğünde yazar). Satır telefonun açık mı kapalı mı olduğunu, pencerede kaç arama yapılıp kaçında bulunduğunu, en sık
+ * ve en ileri ıska ölçütünü, üst şeridin ortalama parlaklığını, karenin ortanca parlaklığını, boyunu ve platformun kare
+ * biçimini (Android: çözücü biçimi ve ham Y aralığı; Mac/iPhone: renk uzayı) verir. Mac/iPhone (PhoneSearchStatus,
+ * PhoneTrace.swift) ve Windows (PhoneSearchStatus, PhoneTrace.cs) aynı metin; ortak deneme Fixtures/phone-search-status.json.
+ */
+class PhoneSearchStatus {
+    private var windowStart: Long? = null
+    private var searches = 0
+    private var found = 0
+    private var furthest: GamePhoneGeometry.Step? = null
+    private val counts = sortedMapOf<GamePhoneGeometry.Step, Int>()
+    private var levelSum = 0
+    private var levels = 0
+
+    /** Bir arama: sıkı aramanın sonucu ([probe]; yoksa null), telefon bu aramada bulundu mu ([seen]). Satır zamanı geldiyse true. */
+    fun note(probe: GamePhoneGeometry.Probe?, seen: Boolean, now: Long): Boolean {
+        val start = windowStart?.takeIf { now >= it } ?: now.also { windowStart = it }
+        searches++
+        if (seen) found++
+        if (probe != null) {
+            counts[probe.step] = (counts[probe.step] ?: 0) + 1
+            if (furthest.let { it == null || probe.step > it }) furthest = probe.step
+            if (probe.level >= 0) {
+                levelSum += probe.level
+                levels++
+            }
+        }
+        return now - start >= WINDOW_MS
+    }
+
+    /** Pencerenin satırı; pencere baştan başlar. [median]: karenin ortanca parlaklığı (0–255), [frame]: platformun kare biçimi. */
+    fun line(open: Boolean, width: Int, height: Int, median: Int, frame: String?): String {
+        val common = counts.entries.sortedWith(compareByDescending<Map.Entry<GamePhoneGeometry.Step, Int>> { it.value }.thenBy { it.key })
+            .firstOrNull()
+        val level = if (levels > 0) levelSum / levels else -1
+        val text = StringBuilder("telefon arama durumu (${WINDOW_MS / 1000} sn): telefon ${if (open) "açık" else "kapalı"}, ")
+            .append("$searches arama, $found bulundu, ")
+            .append(if (common != null) "en sık ölçüt ${PhoneTrace.reason(common.key)} (${common.value})" else "en sık ölçüt yok")
+            .append(", en ileri ölçüt ").append(furthest?.let { PhoneTrace.reason(it) } ?: "yok")
+            .append(", üst şerit parlaklığı ").append(if (level >= 0) "$level/255" else "ölçülmedi")
+        if (level in 0 until GamePhoneGeometry.DARK_LEVEL) text.append(" (karanlık)")
+        text.append(", ortanca parlaklık $median/255, kare ${width}x$height")
+        if (!frame.isNullOrEmpty()) text.append(", ").append(frame)
+        reset()
+        return text.toString()
+    }
+
+    fun reset() {
+        windowStart = null
+        searches = 0
+        found = 0
+        furthest = null
+        counts.clear()
+        levelSum = 0
+        levels = 0
+    }
+
+    companion object {
+        const val WINDOW_MS = 30_000L
+
+        /** Tonların (0–255) ortancası; boşsa 0. */
+        fun median(tones: IntArray): Int {
+            if (tones.isEmpty()) return 0
+            val sorted = tones.sortedArray()
+            return sorted[(sorted.size - 1) / 2]
+        }
+
+        /** Karenin ortanca parlaklığı (0–255): [COLUMNS]×[ROWS] noktada [PhoneImage.tone]. */
+        fun median(image: PhoneImage): Int {
+            if (image.width <= 0 || image.height <= 0) return 0
+            val tones = IntArray(COLUMNS * ROWS)
+            for (y in 0 until ROWS) for (x in 0 until COLUMNS) {
+                val px = ((x + 0.5) * image.width / COLUMNS).toInt().coerceIn(0, image.width - 1)
+                val py = ((y + 0.5) * image.height / ROWS).toInt().coerceIn(0, image.height - 1)
+                tones[y * COLUMNS + x] = image.tone(px, py) shr 8
+            }
+            return median(tones)
+        }
+
+        const val COLUMNS = 64
+        const val ROWS = 36
+    }
+}

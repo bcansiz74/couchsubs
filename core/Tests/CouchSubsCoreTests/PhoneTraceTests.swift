@@ -97,7 +97,7 @@ final class PhoneTraceTests: XCTestCase {
         let tracker = GamePhoneTracker(locate: { _ in
             found ? GamePhoneGeometry.Pose(topX: 0.45, topY: top, bottomX: 0.45, bottomY: top + 0.68) : nil
         })
-        tracker.onLog = { log.append($0) }
+        tracker.onLog = { if !$0.contains("telefon arama durumu") { log.append($0) } } // 30 sn durum satırı ayrı (PhoneSearchStatusTests)
         var time = 0
         func sample() { time += 400; _ = tracker.sample(image, now: time) }
 

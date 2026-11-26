@@ -182,3 +182,95 @@ internal sealed class PhoneRowsLog
         return $"telefon satırları: {shown}";
     }
 }
+
+/// <summary>
+/// Telefon aramasının durumu, GTA 6 oynanırken <see cref="WindowMs"/>'de bir tek satır (beta-105, X: "telefon komple
+/// çalışmıyor"; #1385'in beta-104 günlüğünde telefon hiç bulunamayınca tek satır yoktu: <see cref="PhoneMissLog"/> yalnız
+/// telefona benzer bir şey görüldüğünde yazar). Satır telefonun açık mı kapalı mı olduğunu, pencerede kaç arama yapılıp
+/// kaçında bulunduğunu, en sık ve en ileri ıska ölçütünü, üst şeridin ortalama parlaklığını, karenin ortanca parlaklığını ve
+/// boyunu verir (Mac/iPhone renk uzayını, Android çözücü biçimini ve ham Y aralığını da ekler). Mac/iPhone
+/// (PhoneSearchStatus, PhoneTrace.swift) ve Android (PhoneSearchStatus, PhoneTrace.kt) aynı metin; ortak deneme
+/// Fixtures/phone-search-status.json.
+/// </summary>
+internal sealed class PhoneSearchStatus
+{
+    internal const long WindowMs = 30_000;
+    internal const int Columns = 64, Rows = 36;
+    private long? windowStart;
+    private int searches, found, levelSum, levels;
+    private GamePhoneGeometry.Step? furthest;
+    private readonly Dictionary<GamePhoneGeometry.Step, int> counts = [];
+
+    /// <summary>Bir arama: sıkı aramanın sonucu (yoksa null), telefon bu aramada bulundu mu. Satır zamanı geldiyse true.</summary>
+    internal bool Note(GamePhoneGeometry.Probe? probe, bool seen, long now)
+    {
+        if (windowStart is not { } start || now < start) windowStart = start = now;
+        searches++;
+        if (seen) found++;
+        if (probe is { } p)
+        {
+            counts[p.Step] = counts.GetValueOrDefault(p.Step) + 1;
+            if (furthest is not { } f || p.Step > f) furthest = p.Step;
+            if (p.Level >= 0)
+            {
+                levelSum += p.Level;
+                levels++;
+            }
+        }
+        return now - start >= WindowMs;
+    }
+
+    /// <summary>Pencerenin satırı; pencere baştan başlar. <paramref name="median"/>: karenin ortanca parlaklığı (0–255).</summary>
+    internal string Line(bool open, int width, int height, int median, string? frame)
+    {
+        var level = levels > 0 ? levelSum / levels : -1;
+        var text = new System.Text.StringBuilder($"telefon arama durumu ({WindowMs / 1000} sn): telefon {(open ? "açık" : "kapalı")}, ");
+        text.Append($"{searches} arama, {found} bulundu, ");
+        if (counts.Count > 0)
+        {
+            var common = counts.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key).First();
+            text.Append($"en sık ölçüt {PhoneTrace.Reason(common.Key)} ({common.Value})");
+        }
+        else text.Append("en sık ölçüt yok");
+        text.Append(", en ileri ölçüt ").Append(furthest is { } f ? PhoneTrace.Reason(f) : "yok");
+        text.Append(", üst şerit parlaklığı ").Append(level >= 0 ? $"{level}/255" : "ölçülmedi");
+        if (level >= 0 && level < GamePhoneGeometry.DarkLevel) text.Append(" (karanlık)");
+        text.Append($", ortanca parlaklık {median}/255, kare {width}x{height}");
+        if (!string.IsNullOrEmpty(frame)) text.Append(", ").Append(frame);
+        Reset();
+        return text.ToString();
+    }
+
+    internal void Reset()
+    {
+        windowStart = null;
+        searches = found = levelSum = levels = 0;
+        furthest = null;
+        counts.Clear();
+    }
+
+    /// <summary>Tonların (0–255) ortancası; boşsa 0.</summary>
+    internal static int Median(int[] tones)
+    {
+        if (tones.Length == 0) return 0;
+        var sorted = (int[])tones.Clone();
+        Array.Sort(sorted);
+        return sorted[(sorted.Length - 1) / 2];
+    }
+
+    /// <summary>Karenin (BGRA) ortanca parlaklığı (0–255): <see cref="Columns"/>×<see cref="Rows"/> noktada 77·R + 150·G + 29·B.</summary>
+    internal static int Median(Frame frame)
+    {
+        if (frame.Width <= 0 || frame.Height <= 0 || !frame.IsConsistent) return 0;
+        var tones = new int[Columns * Rows];
+        for (var y = 0; y < Rows; y++)
+            for (var x = 0; x < Columns; x++)
+            {
+                var px = Math.Clamp((int)((x + 0.5) * frame.Width / Columns), 0, frame.Width - 1);
+                var py = Math.Clamp((int)((y + 0.5) * frame.Height / Rows), 0, frame.Height - 1);
+                var p = py * frame.Stride + px * 4;
+                tones[y * Columns + x] = (frame.Pixels[p] * 29 + frame.Pixels[p + 1] * 150 + frame.Pixels[p + 2] * 77) >> 8;
+            }
+        return Median(tones);
+    }
+}

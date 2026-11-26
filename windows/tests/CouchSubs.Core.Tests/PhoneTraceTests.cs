@@ -17,7 +17,8 @@ public class PhoneTraceTrackerTests
         var log = new List<string>();
         var frame = Frame.Blank(2, 2);
         CropRegion? candidate = new(0.15, 0.83, 0.32, 0.58);
-        var tracker = new GamePhoneTracker(_ => candidate) { Log = log.Add };
+        // 30 sn durum satırı ayrı (PhoneSearchStatusTests).
+        var tracker = new GamePhoneTracker(_ => candidate) { Log = line => { if (!line.Contains("telefon arama durumu")) log.Add(line); } };
         long time = 0;
         void Sample() { time += 400; tracker.TrySample(frame, time, out _); }
 

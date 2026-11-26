@@ -58,6 +58,7 @@ public final class GamePhoneTracker {
     private var pendingMisses = 0
     private var pendingStrict = false
     private let missLog = PhoneMissLog()
+    private let status = PhoneSearchStatus()
 
     public func sample(_ image: CGImage, now: Int) -> (sampled: Bool, pose: GamePhoneGeometry.Pose?) {
         if let lastTime, now >= lastTime, now - lastTime < Self.intervalMs { return (false, shown) }
@@ -145,6 +146,11 @@ public final class GamePhoneTracker {
         } else if let probe {
             missLog.note(probe, now: now) { [weak self] line in self?.note(line) }
         }
+        // Arama durumu 30 sn'de bir (telefon hiç bulunamasa da): ıska ölçütü, parlaklık, kare biçimi (Android ve Windows aynı).
+        if status.note(probe, seen: found != nil, now: now) {
+            note(status.line(open: shown != nil, width: image.width, height: image.height,
+                             median: PhoneSearchStatus.median(image), frame: FrameColor.describe(image)))
+        }
         return (true, shown)
     }
 
@@ -208,6 +214,7 @@ public final class GamePhoneTracker {
         lastSeen = 0
         clearPending()
         missLog.reset()
+        status.reset()
     }
 }
 

@@ -78,9 +78,14 @@ class GamePhoneTracker internal constructor(
     private var pendingMisses = 0
     private var pendingStrict = false
     private val missLog = PhoneMissLog()
+    private val status = PhoneSearchStatus()
 
+    /**
+     * [frame]: platformun kare biçimi, durum satırı için ([PhoneSearchStatus]; Android: çözücü biçimi ve ham Y aralığı).
+     * Yalnız satır yazılırken (30 sn'de bir) çağrılır.
+     */
     @Synchronized
-    fun sample(image: PhoneImage, now: Long): Sample {
+    fun sample(image: PhoneImage, now: Long, frame: (() -> String)? = null): Sample {
         lastTime?.let { if (now >= it && now - it < INTERVAL_MS) return Sample(false, shown) }
         lastTime = now
         clock = now
@@ -167,6 +172,10 @@ class GamePhoneTracker internal constructor(
         val missed = probe
         if (shown != null) missLog.reset()
         else if (missed != null) missLog.note(missed, now) { note(it) }
+        // Arama durumu 30 sn'de bir (telefon hiç bulunamasa da): ıska ölçütü, parlaklık, kare biçimi.
+        if (status.note(probe, sighted != null, now)) {
+            note(status.line(shown != null, image.width, image.height, PhoneSearchStatus.median(image), frame?.invoke()))
+        }
         return Sample(true, shown)
     }
 
@@ -191,6 +200,7 @@ class GamePhoneTracker internal constructor(
         lastSeen = 0L
         clearPending()
         missLog.reset()
+        status.reset()
     }
 
     companion object {

@@ -1,0 +1,43 @@
+{
+  "about": "GTA 6 telefon aramasının 30 sn'lik durum satırı (PhoneSearchStatus; X, beta-105: \"telefon komple çalışmıyor\"; #1385'in günlüğünde telefon hiç bulunamayınca satır yoktu). Ortak deneme: Mac/iPhone PhoneSearchStatusTests.swift, Windows PhoneSearchStatusTests.cs, Android PhoneSearchStatusTest.kt. 'cases': her örnek bir arama ('at' ms, 'step' sıkı aramanın ölçütü ya da null, 'seen' telefon bulundu mu, 'level' üst şeridin ortanca tonu, -1 ölçülmedi); 'due' her aramadan sonra satır zamanı geldi mi; 'line' son aramadan sonra yazılan satır ('open', 'width', 'height', 'median', 'frame' ile). 'median': tonların ortancası.",
+  "cases": [
+    {
+      "name": "telefon hiç bulunamıyor, karanlık",
+      "open": false, "width": 1280, "height": 720, "median": 18, "frame": "çözücü biçimi 0x15",
+      "samples": [
+        {"at": 0, "step": "noTopSlot", "seen": false, "level": 20},
+        {"at": 10000, "step": "noCamera", "seen": false, "level": 30},
+        {"at": 20000, "step": "noTopSlot", "seen": false, "level": -1},
+        {"at": 30000, "step": "noTopSlot", "seen": false, "level": 40}
+      ],
+      "due": [false, false, false, true],
+      "line": "telefon arama durumu (30 sn): telefon kapalı, 4 arama, 0 bulundu, en sık ölçüt hoparlör yarığı yok (3), en ileri ölçüt ön kamera yok, üst şerit parlaklığı 30/255 (karanlık), ortanca parlaklık 18/255, kare 1280x720, çözücü biçimi 0x15"
+    },
+    {
+      "name": "telefon açık",
+      "open": true, "width": 1920, "height": 1080, "median": 120, "frame": "",
+      "samples": [
+        {"at": 5000, "step": "found", "seen": true, "level": 120},
+        {"at": 20000, "step": "rim", "seen": true, "level": 100},
+        {"at": 35000, "step": "found", "seen": true, "level": 110}
+      ],
+      "due": [false, false, true],
+      "line": "telefon arama durumu (30 sn): telefon açık, 3 arama, 3 bulundu, en sık ölçüt bulundu (2), en ileri ölçüt bulundu, üst şerit parlaklığı 110/255, ortanca parlaklık 120/255, kare 1920x1080"
+    },
+    {
+      "name": "arama sonucu yok",
+      "open": false, "width": 800, "height": 450, "median": 0, "frame": null,
+      "samples": [
+        {"at": 0, "step": null, "seen": false, "level": -1},
+        {"at": 30000, "step": null, "seen": false, "level": -1}
+      ],
+      "due": [false, true],
+      "line": "telefon arama durumu (30 sn): telefon kapalı, 2 arama, 0 bulundu, en sık ölçüt yok, en ileri ölçüt yok, üst şerit parlaklığı ölçülmedi, ortanca parlaklık 0/255, kare 800x450"
+    }
+  ],
+  "median": [
+    {"tones": [5, 1, 9, 3], "median": 3},
+    {"tones": [7], "median": 7},
+    {"tones": [], "median": 0}
+  ]
+}

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import CoreGraphics
 import Foundation
 
 /// GTA 6 telefonunun otomatik okumasında önceden günlüğe hiçbir şey yazmayan yollar (#1251): telefon açıldı/kapandı, telefon
@@ -163,5 +164,84 @@ final class PhoneRowsLog {
         at = now
         let shown = summary.count > Self.maxLength ? String(summary.prefix(Self.maxLength)) + "…" : summary
         return "telefon satırları: \(shown)"
+    }
+}
+
+/// Telefon aramasının durumu, GTA 6 oynanırken `windowMs`'de bir tek satır (beta-105, X: "telefon komple çalışmıyor";
+/// #1385'in beta-104 günlüğünde telefon hiç bulunamayınca tek satır yoktu: `PhoneMissLog` yalnız telefona benzer bir şey
+/// görüldüğünde yazar). Satır telefonun açık mı kapalı mı olduğunu, pencerede kaç arama yapılıp kaçında bulunduğunu, en sık
+/// ve en ileri ıska ölçütünü, üst şeridin ortalama parlaklığını, karenin ortanca parlaklığını, boyunu ve kare biçimini
+/// (Mac/iPhone: renk uzayı; Android: çözücü biçimi ve ham Y aralığı) verir. Windows (PhoneSearchStatus, PhoneTrace.cs) ve
+/// Android (PhoneSearchStatus, PhoneTrace.kt) aynı metin; ortak deneme Fixtures/phone-search-status.json.
+final class PhoneSearchStatus {
+    static let windowMs = 30_000
+    static let columns = 64, rows = 36
+    private var windowStart: Int?
+    private var searches = 0, found = 0
+    private var furthest: GamePhoneGeometry.Step?
+    private var counts: [GamePhoneGeometry.Step: Int] = [:]
+    private var levelSum = 0, levels = 0
+
+    /// Bir arama: sıkı aramanın sonucu (`probe`; yoksa nil), telefon bu aramada bulundu mu (`seen`). Satır zamanı geldiyse true.
+    func note(_ probe: GamePhoneGeometry.Probe?, seen: Bool, now: Int) -> Bool {
+        let start: Int
+        if let windowStart, now >= windowStart { start = windowStart } else {
+            windowStart = now
+            start = now
+        }
+        searches += 1
+        if seen { found += 1 }
+        if let probe {
+            counts[probe.step, default: 0] += 1
+            if furthest.map({ probe.step > $0 }) ?? true { furthest = probe.step }
+            if probe.level >= 0 {
+                levelSum += probe.level
+                levels += 1
+            }
+        }
+        return now - start >= Self.windowMs
+    }
+
+    /// Pencerenin satırı; pencere baştan başlar. `median`: karenin ortanca parlaklığı (0–255), `frame`: kare biçimi.
+    func line(open: Bool, width: Int, height: Int, median: Int, frame: String?) -> String {
+        let common = counts.sorted(by: { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }).first
+        let level = levels > 0 ? levelSum / levels : -1
+        var text = "telefon arama durumu (\(Self.windowMs / 1000) sn): telefon \(open ? "açık" : "kapalı"), "
+            + "\(searches) arama, \(found) bulundu, "
+            + (common.map { "en sık ölçüt \(PhoneTrace.reason($0.key)) (\($0.value))" } ?? "en sık ölçüt yok")
+            + ", en ileri ölçüt " + (furthest.map { PhoneTrace.reason($0) } ?? "yok")
+            + ", üst şerit parlaklığı " + (level >= 0 ? "\(level)/255" : "ölçülmedi")
+        if level >= 0, level < GamePhoneGeometry.darkLevel { text += " (karanlık)" }
+        text += ", ortanca parlaklık \(median)/255, kare \(width)x\(height)"
+        if let frame, !frame.isEmpty { text += ", " + frame }
+        reset()
+        return text
+    }
+
+    func reset() {
+        windowStart = nil
+        searches = 0
+        found = 0
+        furthest = nil
+        counts = [:]
+        levelSum = 0
+        levels = 0
+    }
+
+    /// Tonların (0–255) ortancası; boşsa 0.
+    static func median(_ tones: [Int]) -> Int {
+        guard !tones.isEmpty else { return 0 }
+        return tones.sorted()[(tones.count - 1) / 2]
+    }
+
+    /// Karenin ortanca parlaklığı (0–255): `columns`×`rows` noktaya küçültülmüş karede 77·R + 150·G + 29·B.
+    static func median(_ image: CGImage) -> Int {
+        guard let small = GamePhonePixels(image, width: columns, height: rows) else { return 0 }
+        var tones = [Int]()
+        tones.reserveCapacity(columns * rows)
+        for p in stride(from: 0, to: small.bytes.count - 3, by: 4) {
+            tones.append((77 * Int(small.bytes[p]) + 150 * Int(small.bytes[p + 1]) + 29 * Int(small.bytes[p + 2])) >> 8)
+        }
+        return median(tones)
     }
 }

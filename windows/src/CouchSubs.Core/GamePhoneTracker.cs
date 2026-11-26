@@ -56,6 +56,7 @@ public sealed class GamePhoneTracker
     private int pendingPoints, pendingMisses;
     private bool pendingStrict;
     private readonly PhoneMissLog missLog = new();
+    private readonly PhoneSearchStatus status = new();
 
     /// <summary>
     /// Açık telefonun yeni gözlemi en çok bu kadar oynadıysa (kutunun her kenarı, kareye oranla) aynı telefondur; sıkı
@@ -186,6 +187,9 @@ public sealed class GamePhoneTracker
         // İlk açılış ıskalanınca nedeni (en ileri geçilen ölçüt, en iyi aday) sınırlı aralıkla günlüğe (#1251).
         if (shown is not null) missLog.Reset();
         else if (probe is { } missed) missLog.Note(missed, now, Trace);
+        // Arama durumu 30 sn'de bir (telefon hiç bulunamasa da): ıska ölçütü, parlaklık, kare (Mac/iPhone ve Android aynı).
+        if (status.Note(probe, candidate is not null, now))
+            Trace(status.Line(shown is not null, frame.Width, frame.Height, PhoneSearchStatus.Median(frame), null));
         visible = shown;
         return true;
     }
@@ -258,6 +262,7 @@ public sealed class GamePhoneTracker
         shownPose = null;
         ClearPending();
         missLog.Reset();
+        status.Reset();
     }
 }
 
